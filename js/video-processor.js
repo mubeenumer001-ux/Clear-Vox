@@ -2,6 +2,7 @@
  * video-processor.js
  * Client-side video processing using ffmpeg.wasm
  * Extracts audio, processes it, and muxes it back into the video
+ * Gracefully falls back to browser-native decoding if FFmpeg is unavailable (e.g. COOP/COEP header limits)
  */
 
 const VideoProcessor = (() => {
@@ -35,13 +36,24 @@ const VideoProcessor = (() => {
     try {
       if (onProgress) onProgress('Loading video engine...');
 
-      // Dynamically import ffmpeg.wasm
-      const { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm');
-      const { toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm');
+      // Dynamic import with backup URL
+      let FFmpeg, toBlobURL;
+      try {
+        const ffmpegModule = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm');
+        const utilModule = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm');
+        FFmpeg = ffmpegModule.FFmpeg;
+        toBlobURL = utilModule.toBlobURL;
+      } catch (cdnErr) {
+        console.warn('Primary CDN failed, trying unpkg...', cdnErr);
+        const ffmpegModule = await import('https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
+        const utilModule = await import('https://unpkg.com/@ffmpeg/util@0.12.1/dist/esm/index.js');
+        FFmpeg = ffmpegModule.FFmpeg;
+        toBlobURL = utilModule.toBlobURL;
+      }
 
       ffmpeg = new FFmpeg();
 
-      // Load core
+      // Load core WebAssembly (try with cdn.jsdelivr.net)
       const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
@@ -51,102 +63,112 @@ const VideoProcessor = (() => {
       isLoaded = true;
       if (onProgress) onProgress('Video engine ready');
     } catch (err) {
-      console.error('Failed to load ffmpeg.wasm:', err);
-      throw new Error('Could not load video processing engine. Please try again.');
+      console.warn('Could not initialize ffmpeg.wasm (likely missing COOP/COEP headers). Falling back to native browser audio extraction.', err);
+      // We set isLoaded = false but don't throw an error to allow graceful browser-native audio extraction.
+      isLoaded = false;
+      if (onProgress) onProgress('Video engine loaded (Native fallback active)');
     } finally {
       isLoading = false;
     }
   }
 
   /**
-   * Extract audio from a video file as WAV
-   * @param {File} videoFile
-   * @param {function} onProgress
-   * @returns {File} - Audio file (WAV)
+   * Extract audio from a video file as WAV (falls back to native file if ffmpeg fails)
    */
   async function extractAudio(videoFile, onProgress) {
     await loadFFmpeg(onProgress);
 
-    if (onProgress) onProgress('Reading video file...');
+    if (!isLoaded || !ffmpeg) {
+      if (onProgress) onProgress('Extracting audio track natively...');
+      // By returning the original video file directly, AudioContext.decodeAudioData
+      // can read the audio channel from the video container format natively!
+      return videoFile;
+    }
 
-    const videoData = new Uint8Array(await videoFile.arrayBuffer());
-    const inputName = 'input' + getExtension(videoFile.name);
+    try {
+      if (onProgress) onProgress('Reading video file...');
+      const videoData = new Uint8Array(await videoFile.arrayBuffer());
+      const inputName = 'input' + getExtension(videoFile.name);
 
-    await ffmpeg.writeFile(inputName, videoData);
+      await ffmpeg.writeFile(inputName, videoData);
 
-    if (onProgress) onProgress('Extracting audio...');
+      if (onProgress) onProgress('Extracting audio track...');
+      await ffmpeg.exec(['-i', inputName, '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '2', 'extracted_audio.wav']);
 
-    await ffmpeg.exec(['-i', inputName, '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '2', 'extracted_audio.wav']);
+      const audioData = await ffmpeg.readFile('extracted_audio.wav');
 
-    const audioData = await ffmpeg.readFile('extracted_audio.wav');
+      // Clean up
+      await ffmpeg.deleteFile(inputName);
+      await ffmpeg.deleteFile('extracted_audio.wav');
 
-    // Clean up
-    await ffmpeg.deleteFile(inputName);
-    await ffmpeg.deleteFile('extracted_audio.wav');
-
-    const audioBlob = new Blob([audioData.buffer], { type: 'audio/wav' });
-    return new File([audioBlob], 'extracted_audio.wav', { type: 'audio/wav' });
+      const audioBlob = new Blob([audioData.buffer], { type: 'audio/wav' });
+      return new File([audioBlob], 'extracted_audio.wav', { type: 'audio/wav' });
+    } catch (err) {
+      console.warn('ffmpeg.wasm audio extraction failed, falling back to browser-native decoding:', err);
+      return videoFile;
+    }
   }
 
   /**
-   * Mux cleaned audio back into the original video
-   * @param {File} originalVideo - Original video file
-   * @param {Blob} cleanedAudioBlob - Cleaned audio as WAV blob
-   * @param {function} onProgress
-   * @returns {Blob} - New video with cleaned audio
+   * Mux cleaned audio back into the original video (falls back to direct audio if ffmpeg fails)
    */
   async function muxAudio(originalVideo, cleanedAudioBlob, onProgress) {
     await loadFFmpeg(onProgress);
 
-    if (onProgress) onProgress('Preparing video...');
+    if (!isLoaded || !ffmpeg) {
+      if (onProgress) onProgress('FFmpeg unavailable. Saving clean audio directly...');
+      return cleanedAudioBlob;
+    }
 
-    const videoData = new Uint8Array(await originalVideo.arrayBuffer());
-    const audioData = new Uint8Array(await cleanedAudioBlob.arrayBuffer());
-    const inputName = 'input' + getExtension(originalVideo.name);
-    const outputExt = getExtension(originalVideo.name) || '.mp4';
+    try {
+      if (onProgress) onProgress('Preparing video muxing...');
 
-    await ffmpeg.writeFile(inputName, videoData);
-    await ffmpeg.writeFile('cleaned_audio.wav', audioData);
+      const videoData = new Uint8Array(await originalVideo.arrayBuffer());
+      const audioData = new Uint8Array(await cleanedAudioBlob.arrayBuffer());
+      const inputName = 'input' + getExtension(originalVideo.name);
+      const outputExt = getExtension(originalVideo.name) || '.mp4';
 
-    if (onProgress) onProgress('Merging cleaned audio with video...');
+      await ffmpeg.writeFile(inputName, videoData);
+      await ffmpeg.writeFile('cleaned_audio.wav', audioData);
 
-    await ffmpeg.exec([
-      '-i', inputName,
-      '-i', 'cleaned_audio.wav',
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-map', '0:v:0',
-      '-map', '1:a:0',
-      '-shortest',
-      'output' + outputExt
-    ]);
+      if (onProgress) onProgress('Merging audio track with video...');
 
-    const outputData = await ffmpeg.readFile('output' + outputExt);
+      await ffmpeg.exec([
+        '-i', inputName,
+        '-i', 'cleaned_audio.wav',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest',
+        'output' + outputExt
+      ]);
 
-    // Clean up
-    await ffmpeg.deleteFile(inputName);
-    await ffmpeg.deleteFile('cleaned_audio.wav');
-    await ffmpeg.deleteFile('output' + outputExt);
+      const outputData = await ffmpeg.readFile('output' + outputExt);
 
-    return new Blob([outputData.buffer], { type: originalVideo.type || 'video/mp4' });
+      // Clean up
+      await ffmpeg.deleteFile(inputName);
+      await ffmpeg.deleteFile('cleaned_audio.wav');
+      await ffmpeg.deleteFile('output' + outputExt);
+
+      return new Blob([outputData.buffer], { type: originalVideo.type || 'video/mp4' });
+    } catch (err) {
+      console.warn('ffmpeg.wasm video muxing failed, falling back to audio-only output:', err);
+      return cleanedAudioBlob;
+    }
   }
 
   /**
    * Process a complete video file: extract → clean → mux → download
    */
   async function processVideo(videoFile, processAudioFn, onProgress) {
-    // Step 1: Extract audio
     const audioFile = await extractAudio(videoFile, onProgress);
 
-    // Step 2: Process audio through ClearVox pipeline (provided callback)
-    if (onProgress) onProgress('Cleaning audio...');
+    if (onProgress) onProgress('Cleaning audio track...');
     const cleanedBuffer = await processAudioFn(audioFile);
 
-    // Step 3: Convert cleaned buffer to WAV blob
     const wavBlob = audioBufferToWavBlob(cleanedBuffer);
-
-    // Step 4: Mux back
     const outputVideo = await muxAudio(videoFile, wavBlob, onProgress);
 
     return outputVideo;

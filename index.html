@@ -128,14 +128,14 @@
       <p class="hero-subtitle">
         Remove background noise, echo, and enhance clarity — all in your browser. No uploads, 100% private.
       </p>
-      <div class="hero-chips">
-        <span class="chip">🔇 Noise Removal</span>
-        <span class="chip">🎛️ Studio EQ</span>
-        <span class="chip">🏠 De-Reverb</span>
-        <span class="chip">🦷 De-Esser</span>
-        <span class="chip">📊 Auto-Level</span>
-        <span class="chip">✂️ Silence Trim</span>
-        <span class="chip">🎬 Video Support</span>
+      <div class="hero-chips" id="feature-chips-container">
+        <button class="chip" data-feature="noise">🔇 Noise Removal</button>
+        <button class="chip" data-feature="eq">🎛️ Studio EQ</button>
+        <button class="chip" data-feature="reverb">🏠 De-Reverb</button>
+        <button class="chip" data-feature="deesser">🦷 De-Esser</button>
+        <button class="chip" data-feature="level">📊 Auto-Level</button>
+        <button class="chip" data-feature="silence">✂️ Silence Trim</button>
+        <button class="chip" data-feature="video">🎬 Video Support</button>
       </div>
     </section>
 
@@ -146,6 +146,113 @@
         <p class="drop-zone-text">Drop your audio or video files here</p>
         <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, OGG, FLAC, M4A, MP4, MOV, WEBM</p>
         <input type="file" id="file-input" accept="audio/*,video/mp4,video/webm,video/quicktime" multiple>
+      </div>
+    </section>
+
+    <!-- Quick Settings Panel -->
+    <section class="glass-card" id="quick-settings-panel" style="display: none; margin-top: 1.5rem; margin-bottom: 1.5rem;">
+      <h2 class="section-title"><span class="icon">🎛️</span> Feature Adjustments</h2>
+      
+      <div id="quick-ctrl-noise" class="control-item" style="display: none;">
+        <div class="control-icon noise">🔇</div>
+        <div class="control-info">
+          <div class="control-label">Noise Removal Strength</div>
+          <div class="control-desc">Adjust the depth of the noise filter</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-noise-amount" min="0" max="100" value="70">
+            <div class="range-value" id="quick-noise-value">70%</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-eq" class="control-item" style="display: none;">
+        <div class="control-icon eq">🎛️</div>
+        <div class="control-info">
+          <div class="control-label">Studio Magic EQ Amount</div>
+          <div class="control-desc">Adjust high-shelf air and low-shelf warmth</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-eq-amount" min="0" max="100" value="50">
+            <div class="range-value" id="quick-eq-value">50%</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-reverb" class="control-item" style="display: none;">
+        <div class="control-icon reverb">🏠</div>
+        <div class="control-info">
+          <div class="control-label">De-Reverb Amount</div>
+          <div class="control-desc">Reduce late reflections and echo tail</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-reverb-amount" min="0" max="100" value="50">
+            <div class="range-value" id="quick-reverb-value">50%</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-deesser" class="control-item" style="display: none;">
+        <div class="control-icon deesser">🦷</div>
+        <div class="control-info">
+          <div class="control-label">De-Esser Sibilance Limit</div>
+          <div class="control-desc">Soften harsh S, Sh, and T consonants</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-deesser-amount" min="0" max="100" value="50">
+            <div class="range-value" id="quick-deesser-value">50%</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-level" class="control-item" style="display: none;">
+        <div class="control-icon level">📊</div>
+        <div class="control-info">
+          <div class="control-label">Auto-Leveling Dynamic Ratio</div>
+          <div class="control-desc">Range compression depth for consistent level</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-level-amount" min="0" max="100" value="80">
+            <div class="range-value" id="quick-level-value">80%</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-silence" class="control-item" style="display: none;">
+        <div class="control-icon silence">✂️</div>
+        <div class="control-info">
+          <div class="control-label">Silence Sensitivity</div>
+          <div class="control-desc">Threshold for dead air and breath detection</div>
+        </div>
+        <div class="control-right" style="flex-direction: column; align-items: flex-end; gap: 8px;">
+          <div class="range-slider">
+            <input type="range" id="quick-silence-sensitivity" min="0" max="100" value="50">
+            <div class="range-value" id="quick-silence-value">50%</div>
+          </div>
+          <div class="mode-toggle" id="quick-silence-mode-toggle">
+            <button class="mode-btn active" data-mode="compress">Compress</button>
+            <button class="mode-btn" data-mode="remove">Remove</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-video" class="control-item" style="display: none;">
+        <div class="control-icon video">🎬</div>
+        <div class="control-info">
+          <div class="control-label">Video Sound Enhancer Mix</div>
+          <div class="control-desc">Dry/Wet mix of the clean audio with the video</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-video-mix" min="0" max="100" value="100">
+            <div class="range-value" id="quick-video-value">100%</div>
+          </div>
+        </div>
       </div>
     </section>
 

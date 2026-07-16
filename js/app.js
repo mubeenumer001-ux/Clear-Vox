@@ -72,6 +72,7 @@
   let isProcessing = false;
   let reprocessTimeout = null;
   let selectedExportFormat = 'wav';
+  let currentProcessId = 0; // Async cancel group id
 
   // All processing step definitions for the log
   const ALL_STEPS = [
@@ -93,6 +94,8 @@
     bindPresetEvents();
     bindExportEvents();
     bindBatchEvents();
+    setupFeatureChips();
+    setupQuickSettingsSliders();
     checkAuthState();
   }
 
@@ -201,11 +204,13 @@
 
     levelToggle.addEventListener('change', () => {
       AudioEngine.updateSetting('levelEnabled', levelToggle.checked);
+      syncChipsFromSettings();
       scheduleReprocess();
     });
 
     silenceToggle.addEventListener('change', () => {
       AudioEngine.updateSetting('silenceTrimEnabled', silenceToggle.checked);
+      syncChipsFromSettings();
       scheduleReprocess();
     });
 
@@ -232,6 +237,7 @@
   function bindControl(toggle, slider, valueEl, toggleKey, amountKey) {
     toggle.addEventListener('change', () => {
       AudioEngine.updateSetting(toggleKey, toggle.checked);
+      syncChipsFromSettings();
       scheduleReprocess();
     });
     slider.addEventListener('input', () => {
@@ -239,6 +245,199 @@
       AudioEngine.updateSetting(amountKey, slider.value / 100);
     });
     slider.addEventListener('change', scheduleReprocess);
+  }
+
+  // ============================================
+  // INTERACTIVE FEATURE CHIPS & QUICK SETTINGS
+  // ============================================
+  function setupFeatureChips() {
+    const chipsContainer = document.getElementById('feature-chips-container');
+    if (!chipsContainer) return;
+
+    chipsContainer.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const feature = chip.dataset.feature;
+        
+        if (feature === 'video') {
+          // Special toggle for video Support representation
+          chip.classList.toggle('active');
+          updateQuickSettingsVisibility();
+          return;
+        }
+
+        const enabledKey = {
+          'noise': 'noiseEnabled',
+          'eq': 'eqEnabled',
+          'reverb': 'reverbEnabled',
+          'deesser': 'deEsserEnabled',
+          'level': 'levelEnabled',
+          'silence': 'silenceTrimEnabled'
+        }[feature];
+
+        const settings = AudioEngine.getSettings();
+        const nextState = !settings[enabledKey];
+        
+        // Update AudioEngine
+        AudioEngine.updateSetting(enabledKey, nextState);
+
+        // Sync with primary sliders checked box
+        const toggleEl = document.getElementById({
+          'noise': 'noise-toggle',
+          'eq': 'eq-toggle',
+          'reverb': 'reverb-toggle',
+          'deesser': 'deesser-toggle',
+          'level': 'level-toggle',
+          'silence': 'silence-toggle'
+        }[feature]);
+
+        if (toggleEl) toggleEl.checked = nextState;
+
+        syncChipsFromSettings();
+        scheduleReprocess();
+      });
+    });
+
+    syncChipsFromSettings();
+  }
+
+  function syncChipsFromSettings() {
+    const s = AudioEngine.getSettings();
+    const chipsContainer = document.getElementById('feature-chips-container');
+    if (!chipsContainer) return;
+
+    const mapping = {
+      'noise': s.noiseEnabled,
+      'eq': s.eqEnabled,
+      'reverb': s.reverbEnabled,
+      'deesser': s.deEsserEnabled,
+      'level': s.levelEnabled,
+      'silence': s.silenceTrimEnabled
+    };
+
+    Object.entries(mapping).forEach(([feature, enabled]) => {
+      const chip = chipsContainer.querySelector(`.chip[data-feature="${feature}"]`);
+      if (chip) {
+        chip.classList.toggle('active', enabled);
+      }
+    });
+
+    updateQuickSettingsVisibility();
+  }
+
+  function updateQuickSettingsVisibility() {
+    const s = AudioEngine.getSettings();
+    const quickPanel = document.getElementById('quick-settings-panel');
+    if (!quickPanel) return;
+
+    const features = [
+      { key: 'noise', enabled: s.noiseEnabled, elementId: 'quick-ctrl-noise' },
+      { key: 'eq', enabled: s.eqEnabled, elementId: 'quick-ctrl-eq' },
+      { key: 'reverb', enabled: s.reverbEnabled, elementId: 'quick-ctrl-reverb' },
+      { key: 'deesser', enabled: s.deEsserEnabled, elementId: 'quick-ctrl-deesser' },
+      { key: 'level', enabled: s.levelEnabled, elementId: 'quick-ctrl-level' },
+      { key: 'silence', enabled: s.silenceTrimEnabled, elementId: 'quick-ctrl-silence' },
+      { key: 'video', enabled: document.querySelector('.chip[data-feature="video"]')?.classList.contains('active'), elementId: 'quick-ctrl-video' }
+    ];
+
+    let anyActive = false;
+
+    features.forEach(f => {
+      const el = document.getElementById(f.elementId);
+      if (el) {
+        if (f.enabled) {
+          el.style.display = 'flex';
+          anyActive = true;
+        } else {
+          el.style.display = 'none';
+        }
+      }
+    });
+
+    if (anyActive) {
+      quickPanel.style.display = 'block';
+    } else {
+      quickPanel.style.display = 'none';
+    }
+  }
+
+  function setupQuickSettingsSliders() {
+    // Two-way sync primary and quick-settings sliders
+    linkTwoSliders('quick-noise-amount', 'noise-amount', 'quick-noise-value', 'noise-value', 'noiseAmount');
+    linkTwoSliders('quick-eq-amount', 'eq-amount', 'quick-eq-value', 'eq-value', 'eqAmount');
+    linkTwoSliders('quick-reverb-amount', 'reverb-amount', 'quick-reverb-value', 'reverb-value', 'reverbAmount');
+    linkTwoSliders('quick-deesser-amount', 'deesser-amount', 'quick-deesser-value', 'deesser-value', 'deEsserAmount');
+
+    // Level settings slider
+    const quickLevelAmount = document.getElementById('quick-level-amount');
+    const quickLevelValue = document.getElementById('quick-level-value');
+    if (quickLevelAmount) {
+      quickLevelAmount.addEventListener('input', () => {
+        quickLevelValue.textContent = quickLevelAmount.value + '%';
+      });
+    }
+
+    // Silence sensitivity slider
+    const quickSilenceSens = document.getElementById('quick-silence-sensitivity');
+    const quickSilenceValue = document.getElementById('quick-silence-value');
+    if (quickSilenceSens) {
+      quickSilenceSens.addEventListener('input', () => {
+        quickSilenceValue.textContent = quickSilenceSens.value + '%';
+        AudioEngine.updateSetting('silenceTrimSensitivity', quickSilenceSens.value / 100);
+      });
+      quickSilenceSens.addEventListener('change', scheduleReprocess);
+    }
+
+    // Silence mode toggles in quick panel
+    const quickSilenceModeToggle = document.getElementById('quick-silence-mode-toggle');
+    if (quickSilenceModeToggle) {
+      quickSilenceModeToggle.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          quickSilenceModeToggle.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+          silenceModeToggle.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+
+          btn.classList.add('active');
+          const siblingBtn = silenceModeToggle.querySelector(`.mode-btn[data-mode="${btn.dataset.mode}"]`);
+          if (siblingBtn) siblingBtn.classList.add('active');
+
+          AudioEngine.updateSetting('silenceTrimMode', btn.dataset.mode);
+          if (AudioEngine.getSettings().silenceTrimEnabled) scheduleReprocess();
+        });
+      });
+    }
+
+    // Video mix slider
+    const quickVideoMix = document.getElementById('quick-video-mix');
+    const quickVideoValue = document.getElementById('quick-video-value');
+    if (quickVideoMix) {
+      quickVideoMix.addEventListener('input', () => {
+        quickVideoValue.textContent = quickVideoMix.value + '%';
+      });
+    }
+  }
+
+  function linkTwoSliders(id1, id2, valId1, valId2, settingKey) {
+    const s1 = document.getElementById(id1);
+    const s2 = document.getElementById(id2);
+    const v1 = document.getElementById(valId1);
+    const v2 = document.getElementById(valId2);
+
+    if (s1 && s2) {
+      s1.addEventListener('input', () => {
+        s2.value = s1.value;
+        v1.textContent = s1.value + '%';
+        v2.textContent = s1.value + '%';
+        AudioEngine.updateSetting(settingKey, s1.value / 100);
+      });
+      s1.addEventListener('change', scheduleReprocess);
+
+      s2.addEventListener('input', () => {
+        s1.value = s2.value;
+        v1.textContent = s2.value + '%';
+        v2.textContent = s2.value + '%';
+        AudioEngine.updateSetting(settingKey, s2.value / 100);
+      });
+      s2.addEventListener('change', scheduleReprocess);
+    }
   }
 
   // ============================================
@@ -258,6 +457,8 @@
 
   async function handleSingleFile(file) {
     currentFile = file;
+    const myProcessId = ++currentProcessId;
+
     AudioEngine.stop();
     WaveformVisualizer.stopFrequencyVisualizer();
     stopPlaybackTimer();
@@ -274,27 +475,36 @@
         // Video: extract audio first
         updateProcessingLog('decode', 'active', 'Extracting audio from video...');
         const audioFile = await VideoProcessor.extractAudio(file, (text) => {
+          if (myProcessId !== currentProcessId) return;
           processingText.textContent = text;
         });
+        if (myProcessId !== currentProcessId) return;
         await AudioEngine.decodeFile(audioFile);
       } else {
         await AudioEngine.decodeFile(file);
       }
+
+      if (myProcessId !== currentProcessId) return;
       updateProcessingLog('decode', 'done');
 
       // Sync settings from UI
       syncSettingsFromUI();
 
       // Process with step-by-step log
-      await processWithLog();
+      if (myProcessId !== currentProcessId) return;
+      await processWithLog(myProcessId);
 
+      if (myProcessId !== currentProcessId) return;
       progressBar.style.width = '100%';
       processingText.textContent = 'All done! ✨';
       await sleep(500);
+      
+      if (myProcessId !== currentProcessId) return;
       hideProcessing();
       showPlayerUI();
 
     } catch (err) {
+      if (myProcessId !== currentProcessId) return;
       console.error('Processing error:', err);
       processingText.textContent = 'Error: ' + (err.message || 'Could not process this file');
       progressBar.style.width = '0%';
@@ -304,7 +514,7 @@
   /**
    * Process audio with step-by-step log feedback
    */
-  async function processWithLog() {
+  async function processWithLog(myProcessId) {
     const s = AudioEngine.getSettings();
 
     // Build step list
@@ -329,6 +539,7 @@
     const totalSteps = enabledSteps.length;
 
     await AudioEngine.processAudio((progress, text) => {
+      if (myProcessId !== currentProcessId) return;
       progressBar.style.width = (10 + progress * 0.85) + '%';
 
       // Determine which step is active based on progress
@@ -351,6 +562,8 @@
         }
       }
     });
+
+    if (myProcessId !== currentProcessId) return;
 
     // Mark all done
     for (const step of enabledSteps) {
@@ -388,7 +601,12 @@
         <button class="file-remove-btn" id="file-remove-btn" title="Remove file">✕</button>
       </div>
     `;
-    document.getElementById('file-remove-btn').addEventListener('click', (e) => { e.stopPropagation(); resetApp(); });
+    
+    // Wire up red X button
+    document.getElementById('file-remove-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetApp();
+    });
   }
 
   // ============================================
@@ -443,8 +661,7 @@
     }
 
     if (customText) {
-      const origText = textEl.textContent.split(' ').slice(1).join(' ');
-      textEl.textContent = textEl.textContent.charAt(0) + ' ' + customText;
+      textEl.textContent = textEl.textContent.split(' ')[0] + ' ' + customText;
     }
   }
 
@@ -492,9 +709,12 @@
     AudioEngine.updateSetting('silenceTrimEnabled', silenceToggle.checked);
     const activeMode = silenceModeToggle.querySelector('.mode-btn.active');
     AudioEngine.updateSetting('silenceTrimMode', activeMode ? activeMode.dataset.mode : 'compress');
+
+    syncChipsFromSettings();
   }
 
   function resetApp() {
+    currentProcessId++; // Invalidate active processing group immediately
     AudioEngine.stop();
     WaveformVisualizer.stopFrequencyVisualizer();
     stopPlaybackTimer();
@@ -517,6 +737,10 @@
     presetsPanel.style.display = 'none';
     presetsPanel.classList.remove('active');
     updatePlayButton(false);
+
+    // Hide quick settings panel
+    const quickPanel = document.getElementById('quick-settings-panel');
+    if (quickPanel) quickPanel.style.display = 'none';
   }
 
   // ============================================
@@ -566,6 +790,17 @@
       b.classList.toggle('active', b.dataset.mode === newSettings.silenceTrimMode);
     });
 
+    // Sync two-way sliders
+    document.getElementById('quick-noise-amount').value = noiseAmount.value;
+    document.getElementById('quick-noise-value').textContent = noiseAmount.value + '%';
+    document.getElementById('quick-eq-amount').value = eqAmount.value;
+    document.getElementById('quick-eq-value').textContent = eqAmount.value + '%';
+    document.getElementById('quick-reverb-amount').value = reverbAmount.value;
+    document.getElementById('quick-reverb-value').textContent = reverbAmount.value + '%';
+    document.getElementById('quick-deesser-amount').value = deesserAmount.value;
+    document.getElementById('quick-deesser-value').textContent = deesserAmount.value + '%';
+
+    syncChipsFromSettings();
     scheduleReprocess();
   }
 
@@ -573,13 +808,11 @@
   // EXPORT
   // ============================================
   function bindExportEvents() {
-    // Toggle dropdown on right-click or long press
     btnExport.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       exportDropdown.classList.toggle('open');
     });
 
-    // Click to export with selected format
     btnExport.addEventListener('click', () => {
       if (exportDropdown.classList.contains('open')) {
         exportDropdown.classList.remove('open');
@@ -588,7 +821,6 @@
       exportAudio();
     });
 
-    // Format selection
     exportDropdown.querySelectorAll('.export-option').forEach(opt => {
       opt.addEventListener('click', () => {
         selectedExportFormat = opt.dataset.format;
@@ -601,7 +833,6 @@
       });
     });
 
-    // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.export-group')) {
         exportDropdown.classList.remove('open');
@@ -615,7 +846,7 @@
 
     const filename = currentFile ? currentFile.name : 'recording.wav';
 
-    // If it was a video, mux back
+    // If video file loaded, mux back
     if (currentFile && VideoProcessor.isVideoFile(currentFile)) {
       try {
         processingText.textContent = 'Preparing video export...';
@@ -649,7 +880,6 @@
   // BATCH PROCESSING
   // ============================================
   function handleBatchFiles(files) {
-    // Show batch panel
     batchPanel.classList.add('active');
     batchPanel.style.display = '';
 
@@ -658,7 +888,6 @@
       const arrayBuffer = await file.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-      // Use current settings
       syncSettingsFromUI();
       const s = AudioEngine.getSettings();
 
@@ -736,7 +965,6 @@
   }
 
   function renderBatchQueue(queue, stats) {
-    // Render items
     batchList.innerHTML = queue.map(item => {
       const stateIcons = { queued: '⏳', processing: '⚙️', done: '✅', error: '❌' };
       return `
@@ -755,7 +983,6 @@
       `;
     }).join('');
 
-    // Stats
     batchStats.innerHTML = `
       <span><span class="batch-stat-label">Total:</span><span class="batch-stat-value">${stats.total}</span></span>
       <span><span class="batch-stat-label">Done:</span><span class="batch-stat-value">${stats.done}</span></span>
@@ -838,7 +1065,6 @@
   // REPROCESS
   // ============================================
   function scheduleReprocess() {
-    // Mark preset as custom
     presetsBar.querySelectorAll('.preset-chip').forEach(c => {
       c.classList.toggle('active', c.dataset.preset === 'custom');
     });
@@ -860,11 +1086,17 @@
       showProcessingWithLog();
       updateProcessingLog('decode', 'done');
 
+      const myProcessId = ++currentProcessId;
+
       try {
-        await processWithLog();
+        await processWithLog(myProcessId);
+        if (myProcessId !== currentProcessId) return;
+
         progressBar.style.width = '100%';
         processingText.textContent = 'All done! ✨';
         await sleep(350);
+        
+        if (myProcessId !== currentProcessId) return;
         hideProcessing();
         showPlayerUI();
 
@@ -880,6 +1112,7 @@
           }
         }
       } catch (err) {
+        if (myProcessId !== currentProcessId) return;
         console.error('Reprocess error:', err);
         hideProcessing();
         showPlayerUI();
