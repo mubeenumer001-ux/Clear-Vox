@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ClearVox — AI-powered audio cleaner. Remove background noise, echo, and enhance your recordings to studio quality. 100% private, runs in your browser.">
+  <meta name="theme-color" content="#050508">
+  <title>ClearVox — AI Audio Cleaner</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Ambient Background -->
+  <div class="ambient-bg" aria-hidden="true">
+    <div class="ambient-orb"></div>
+    <div class="ambient-orb"></div>
+    <div class="ambient-orb"></div>
+  </div>
+
+  <!-- ================================ -->
+  <!-- AUTH OVERLAY                     -->
+  <!-- ================================ -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="ambient-bg" aria-hidden="true">
+      <div class="ambient-orb"></div>
+      <div class="ambient-orb"></div>
+      <div class="ambient-orb"></div>
+    </div>
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="auth-logo-icon">🎙️</div>
+          <span class="auth-logo-text">ClearVox</span>
+        </div>
+        <p class="auth-subtitle">Studio-quality audio cleaning, powered by AI</p>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-signin" data-tab="signin">Sign In</button>
+          <button class="auth-tab" id="tab-signup" data-tab="signup">Sign Up</button>
+        </div>
+
+        <div class="auth-error" id="auth-error"></div>
+
+        <form class="auth-form active" id="form-signin">
+          <div class="input-group">
+            <label for="signin-email">Email</label>
+            <input type="email" id="signin-email" placeholder="you@example.com" required autocomplete="email">
+            <span class="input-icon">✉️</span>
+          </div>
+          <div class="input-group">
+            <label for="signin-password">Password</label>
+            <input type="password" id="signin-password" placeholder="••••••••" required autocomplete="current-password" minlength="6">
+            <span class="input-icon">🔒</span>
+          </div>
+          <button type="submit" class="auth-btn auth-btn-primary">Sign In</button>
+        </form>
+
+        <form class="auth-form" id="form-signup">
+          <div class="input-group">
+            <label for="signup-name">Full Name</label>
+            <input type="text" id="signup-name" placeholder="John Doe" required autocomplete="name">
+            <span class="input-icon">👤</span>
+          </div>
+          <div class="input-group">
+            <label for="signup-email">Email</label>
+            <input type="email" id="signup-email" placeholder="you@example.com" required autocomplete="email">
+            <span class="input-icon">✉️</span>
+          </div>
+          <div class="input-group">
+            <label for="signup-password">Password</label>
+            <input type="password" id="signup-password" placeholder="Min 6 characters" required autocomplete="new-password" minlength="6">
+            <span class="input-icon">🔒</span>
+          </div>
+          <button type="submit" class="auth-btn auth-btn-primary">Create Account</button>
+        </form>
+
+        <div class="auth-divider"><span>or continue with</span></div>
+
+        <div class="social-auth">
+          <button type="button" class="social-btn" id="auth-google">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 001 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Google
+          </button>
+          <button type="button" class="social-btn" id="auth-github">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+          </button>
+        </div>
+
+        <div class="auth-footer">
+          By continuing, you agree to our <a href="#">Terms</a> & <a href="#">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================ -->
+  <!-- MAIN APPLICATION                 -->
+  <!-- ================================ -->
+  <div class="app-wrapper" id="app-wrapper">
+
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <div class="nav-brand">
+        <div class="nav-logo-icon">🎙️</div>
+        <span class="nav-logo-text">ClearVox</span>
+      </div>
+      <div class="nav-right">
+        <div class="nav-user" id="nav-user">
+          <div class="nav-avatar" id="nav-avatar">U</div>
+          <span class="nav-username" id="nav-username">User</span>
+        </div>
+        <button class="nav-signout" id="btn-signout">Sign Out</button>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero-section">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        AI-Powered Audio Engine
+      </div>
+      <h1 class="hero-title">
+        Clean your audio to<br>
+        <span class="gradient-text">studio quality</span>
+      </h1>
+      <p class="hero-subtitle">
+        Remove background noise, echo, and enhance clarity — all in your browser. No uploads, 100% private.
+      </p>
+      <div class="hero-chips">
+        <span class="chip">🔇 Noise Removal</span>
+        <span class="chip">🎛️ Studio EQ</span>
+        <span class="chip">🏠 De-Reverb</span>
+        <span class="chip">🦷 De-Esser</span>
+        <span class="chip">📊 Auto-Level</span>
+        <span class="chip">✂️ Silence Trim</span>
+        <span class="chip">🎬 Video Support</span>
+      </div>
+    </section>
+
+    <!-- Upload Zone -->
+    <section class="glass-card" id="upload-section">
+      <div class="drop-zone" id="drop-zone">
+        <span class="drop-zone-icon">🎵</span>
+        <p class="drop-zone-text">Drop your audio or video files here</p>
+        <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, OGG, FLAC, M4A, MP4, MOV, WEBM</p>
+        <input type="file" id="file-input" accept="audio/*,video/mp4,video/webm,video/quicktime" multiple>
+      </div>
+    </section>
+
+    <!-- Processing Log (Step-by-step feedback) -->
+    <section class="glass-card processing-status" id="processing-status">
+      <div class="processing-spinner-wrap">
+        <div class="processing-spinner"></div>
+        <div class="processing-spinner-inner"></div>
+      </div>
+      <p class="processing-text" id="processing-text">Analyzing audio...</p>
+      <div class="processing-progress">
+        <div class="processing-progress-bar" id="processing-progress-bar"></div>
+      </div>
+      <!-- Step-by-step processing log -->
+      <div class="processing-log" id="processing-log"></div>
+    </section>
+
+    <!-- Waveform Visualization -->
+    <section class="glass-card waveform-panel" id="waveform-panel">
+      <h2 class="section-title"><span class="icon">📈</span> Waveform</h2>
+      <div class="waveform-container" id="waveform-container">
+        <canvas id="waveform-canvas"></canvas>
+        <div class="waveform-cursor" id="waveform-cursor"></div>
+      </div>
+      <div class="waveform-time">
+        <span id="time-current">0:00</span>
+        <span id="time-duration">0:00</span>
+      </div>
+    </section>
+
+    <!-- Player Controls -->
+    <section class="player-controls" id="player-controls">
+      <button class="btn btn-primary" id="btn-play" title="Play / Pause">
+        <span id="play-icon">▶</span>
+        <span id="play-text">Play</span>
+      </button>
+      <button class="btn btn-secondary btn-toggle" id="btn-toggle" title="Toggle Before/After">
+        <span>🔄</span>
+        <span id="toggle-text">Cleaned</span>
+      </button>
+
+      <!-- Export with format selector -->
+      <div class="export-group">
+        <button class="btn btn-export" id="btn-export" title="Download cleaned audio">
+          <span>📥</span>
+          <span id="export-label">Export WAV</span>
+        </button>
+        <div class="export-dropdown" id="export-dropdown">
+          <button class="export-option active" data-format="wav">
+            <span class="export-opt-icon">📄</span>
+            <span class="export-opt-info">
+              <span class="export-opt-name">WAV (Lossless)</span>
+              <span class="export-opt-desc">Best quality, large file</span>
+            </span>
+          </button>
+          <button class="export-option" data-format="mp3-320">
+            <span class="export-opt-icon">🎵</span>
+            <span class="export-opt-info">
+              <span class="export-opt-name">MP3 320kbps</span>
+              <span class="export-opt-desc">High quality, smaller file</span>
+            </span>
+          </button>
+          <button class="export-option" data-format="mp3-128">
+            <span class="export-opt-icon">🎵</span>
+            <span class="export-opt-info">
+              <span class="export-opt-name">MP3 128kbps</span>
+              <span class="export-opt-desc">Good quality, smallest file</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Smart Presets -->
+    <section class="glass-card presets-panel" id="presets-panel" style="display:none">
+      <h2 class="section-title"><span class="icon">⚡</span> Smart Presets</h2>
+      <div class="presets-bar" id="presets-bar">
+        <button class="preset-chip active" data-preset="custom">
+          <span class="preset-chip-icon">⚙️</span>
+          <span class="preset-chip-label">Custom</span>
+        </button>
+        <button class="preset-chip" data-preset="gamer">
+          <span class="preset-chip-icon">🎮</span>
+          <span class="preset-chip-label">Gamer</span>
+        </button>
+        <button class="preset-chip" data-preset="outdoor">
+          <span class="preset-chip-icon">🌿</span>
+          <span class="preset-chip-label">Outdoor</span>
+        </button>
+        <button class="preset-chip" data-preset="podcast">
+          <span class="preset-chip-icon">🎙️</span>
+          <span class="preset-chip-label">Podcast</span>
+        </button>
+        <button class="preset-chip" data-preset="voiceover">
+          <span class="preset-chip-icon">🎤</span>
+          <span class="preset-chip-label">Voiceover</span>
+        </button>
+        <button class="preset-chip" data-preset="music">
+          <span class="preset-chip-icon">🎵</span>
+          <span class="preset-chip-label">Music</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Processing Controls -->
+    <section class="glass-card controls-panel" id="controls-panel">
+      <h2 class="section-title"><span class="icon">⚙️</span> Processing Controls</h2>
+
+      <!-- Noise Removal -->
+      <div class="control-item">
+        <div class="control-icon noise">🔇</div>
+        <div class="control-info">
+          <div class="control-label">Noise Removal</div>
+          <div class="control-desc">Remove background hum, wind & ambient noise</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="noise-amount" min="0" max="100" value="70">
+            <div class="range-value" id="noise-value">70%</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="noise-toggle" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Studio Magic EQ -->
+      <div class="control-item">
+        <div class="control-icon eq">🎛️</div>
+        <div class="control-info">
+          <div class="control-label">Studio Magic EQ</div>
+          <div class="control-desc">Make any mic sound like a studio condenser</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="eq-amount" min="0" max="100" value="50">
+            <div class="range-value" id="eq-value">50%</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="eq-toggle" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- De-Reverb -->
+      <div class="control-item">
+        <div class="control-icon reverb">🏠</div>
+        <div class="control-info">
+          <div class="control-label">De-Reverb</div>
+          <div class="control-desc">Reduce room echo and reverb tail</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="reverb-amount" min="0" max="100" value="50">
+            <div class="range-value" id="reverb-value">50%</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="reverb-toggle" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- De-Esser -->
+      <div class="control-item">
+        <div class="control-icon deesser">🦷</div>
+        <div class="control-info">
+          <div class="control-label">De-Esser</div>
+          <div class="control-desc">Reduce harsh sibilance (S, Sh, T sounds)</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="deesser-amount" min="0" max="100" value="50">
+            <div class="range-value" id="deesser-value">50%</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="deesser-toggle">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Auto-Level -->
+      <div class="control-item">
+        <div class="control-icon level">📊</div>
+        <div class="control-info">
+          <div class="control-label">Auto-Leveling</div>
+          <div class="control-desc">Consistent volume — whispers up, shouts down</div>
+        </div>
+        <div class="control-right">
+          <label class="toggle-switch">
+            <input type="checkbox" id="level-toggle" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Silence Trimmer -->
+      <div class="control-item">
+        <div class="control-icon silence">✂️</div>
+        <div class="control-info">
+          <div class="control-label">Silence Trimmer</div>
+          <div class="control-desc">Remove or compress dead air and long pauses</div>
+        </div>
+        <div class="control-right">
+          <div class="mode-toggle" id="silence-mode-toggle">
+            <button class="mode-btn active" data-mode="compress">Compress</button>
+            <button class="mode-btn" data-mode="remove">Remove</button>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="silence-toggle">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Frequency Visualizer -->
+    <section class="glass-card freq-visualizer" id="freq-visualizer">
+      <canvas id="freq-canvas"></canvas>
+    </section>
+
+    <!-- Batch Queue Panel -->
+    <section class="glass-card batch-panel" id="batch-panel" style="display:none">
+      <div class="batch-header">
+        <h2 class="section-title"><span class="icon">📋</span> Batch Queue</h2>
+        <div class="batch-actions">
+          <button class="btn-sm btn-sm-secondary" id="batch-download-all" title="Download all as ZIP">📦 Download All</button>
+          <button class="btn-sm btn-sm-ghost" id="batch-clear" title="Clear completed">Clear Done</button>
+        </div>
+      </div>
+      <div class="batch-list" id="batch-list"></div>
+      <div class="batch-stats" id="batch-stats"></div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span class="footer-lock">🔒</span> Your audio never leaves your device &middot; Powered by Web Audio API<br>
+      ClearVox &copy; 2026
+      <div class="footer-links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">About</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/noise-reduction.js"></script>
+  <script src="js/de-esser.js"></script>
+  <script src="js/silence-trimmer.js"></script>
+  <script src="js/audio-engine.js"></script>
+  <script src="js/waveform.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/video-processor.js"></script>
+  <script src="js/batch-processor.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
