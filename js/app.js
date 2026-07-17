@@ -53,6 +53,11 @@
   const noiseToggle = document.getElementById('noise-toggle');
   const noiseAmount = document.getElementById('noise-amount');
   const noiseValue = document.getElementById('noise-value');
+  const noiseCalibrate = document.getElementById('noise-calibrate');
+  const noiseCalibrateValue = document.getElementById('noise-calibrate-value');
+  const hissToggle = document.getElementById('hiss-toggle');
+  const hissAmount = document.getElementById('hiss-amount');
+  const hissValue = document.getElementById('hiss-value');
   const eqToggle = document.getElementById('eq-toggle');
   const eqAmount = document.getElementById('eq-amount');
   const eqValue = document.getElementById('eq-value');
@@ -73,10 +78,13 @@
   let currentProcessId = 0; // Async cancel group id
   let hasUnsavedChanges = false;
   let isInitiallyCleaned = false;
+  let trimStartPercent = 0.0;
+  let trimEndPercent = 1.0;
 
   // All processing step definitions for the log
   const ALL_STEPS = [
     { key: 'noise', name: 'Noise Removal', icon: '🔇' },
+    { key: 'hiss', name: 'Hiss Reduction', icon: '🧹' },
     { key: 'reverb', name: 'De-Reverb', icon: '🏠' },
     { key: 'eq', name: 'Studio Magic EQ', icon: '🎛️' },
     { key: 'deesser', name: 'De-Esser', icon: '🦷' },
@@ -96,6 +104,8 @@
     bindBatchEvents();
     setupFeatureChips();
     setupQuickSettingsSliders();
+    bindNoiseUploadEvents();
+    bindTrimEvents();
 
     // Bind Apply Changes confirmation button
     document.getElementById('btn-apply-changes')?.addEventListener('click', applyChanges);
@@ -216,6 +226,17 @@
       noiseThreshold.addEventListener('change', flagUnsavedChanges);
     }
 
+    // Calibrate noise threshold force shift slider
+    if (noiseCalibrate) {
+      noiseCalibrate.addEventListener('input', () => {
+        const valText = (parseFloat(noiseCalibrate.value) > 0 ? '+' : '') + noiseCalibrate.value + ' dB';
+        if (noiseCalibrateValue) noiseCalibrateValue.textContent = valText;
+        AudioEngine.updateSetting('noiseCalibrate', parseFloat(noiseCalibrate.value));
+      });
+      noiseCalibrate.addEventListener('change', flagUnsavedChanges);
+    }
+
+    bindControl(hissToggle, hissAmount, hissValue, 'hissEnabled', 'hissAmount');
     bindControl(eqToggle, eqAmount, eqValue, 'eqEnabled', 'eqAmount');
     bindControl(reverbToggle, reverbAmount, reverbValue, 'reverbEnabled', 'reverbAmount');
     bindControl(deesserToggle, deesserAmount, deesserValue, 'deEsserEnabled', 'deEsserAmount');
@@ -274,10 +295,9 @@
 
     chipsContainer.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        const feature = chip.dataset.feature;
-
         const enabledKey = {
           'noise': 'noiseEnabled',
+          'hiss': 'hissEnabled',
           'eq': 'eqEnabled',
           'reverb': 'reverbEnabled',
           'deesser': 'deEsserEnabled',
@@ -294,6 +314,7 @@
         // Sync check boxes
         const toggleEl = document.getElementById({
           'noise': 'noise-toggle',
+          'hiss': 'hiss-toggle',
           'eq': 'eq-toggle',
           'reverb': 'reverb-toggle',
           'deesser': 'deesser-toggle',
@@ -318,6 +339,7 @@
 
     const mapping = {
       'noise': s.noiseEnabled,
+      'hiss': s.hissEnabled,
       'eq': s.eqEnabled,
       'reverb': s.reverbEnabled,
       'deesser': s.deEsserEnabled,
@@ -342,6 +364,7 @@
 
     const features = [
       { key: 'noise', enabled: s.noiseEnabled, elementId: 'quick-ctrl-noise' },
+      { key: 'hiss', enabled: s.hissEnabled, elementId: 'quick-ctrl-hiss' },
       { key: 'eq', enabled: s.eqEnabled, elementId: 'quick-ctrl-eq' },
       { key: 'reverb', enabled: s.reverbEnabled, elementId: 'quick-ctrl-reverb' },
       { key: 'deesser', enabled: s.deEsserEnabled, elementId: 'quick-ctrl-deesser' },
@@ -374,6 +397,8 @@
     // Two-way sync primary and quick-settings sliders
     linkTwoSliders('quick-noise-amount', 'noise-amount', 'quick-noise-value', 'noise-value', 'noiseAmount');
     linkTwoSliders('quick-noise-threshold', 'noise-threshold', 'quick-noise-threshold-value', 'noise-threshold-value', 'noiseThreshold');
+    linkTwoDBSliders('quick-noise-calibrate', 'noise-calibrate', 'quick-noise-calibrate-value', 'noise-calibrate-value', 'noiseCalibrate');
+    linkTwoSliders('quick-hiss-amount', 'hiss-amount', 'quick-hiss-value', 'hiss-value', 'hissAmount');
     linkTwoSliders('quick-eq-amount', 'eq-amount', 'quick-eq-value', 'eq-value', 'eqAmount');
     linkTwoSliders('quick-reverb-amount', 'reverb-amount', 'quick-reverb-value', 'reverb-value', 'reverbAmount');
     linkTwoSliders('quick-deesser-amount', 'deesser-amount', 'quick-deesser-value', 'deesser-value', 'deEsserAmount');
@@ -437,6 +462,33 @@
         if (v1) v1.textContent = s2.value + '%';
         if (v2) v2.textContent = s2.value + '%';
         AudioEngine.updateSetting(settingKey, s2.value / 100);
+      });
+      s2.addEventListener('change', flagUnsavedChanges);
+    }
+  }
+
+  function linkTwoDBSliders(id1, id2, valId1, valId2, settingKey) {
+    const s1 = document.getElementById(id1);
+    const s2 = document.getElementById(id2);
+    const v1 = document.getElementById(valId1);
+    const v2 = document.getElementById(valId2);
+
+    if (s1 && s2) {
+      s1.addEventListener('input', () => {
+        s2.value = s1.value;
+        const valText = (parseFloat(s1.value) > 0 ? '+' : '') + s1.value + ' dB';
+        if (v1) v1.textContent = valText;
+        if (v2) v2.textContent = valText;
+        AudioEngine.updateSetting(settingKey, parseFloat(s1.value));
+      });
+      s1.addEventListener('change', flagUnsavedChanges);
+
+      s2.addEventListener('input', () => {
+        s1.value = s2.value;
+        const valText = (parseFloat(s2.value) > 0 ? '+' : '') + s2.value + ' dB';
+        if (v1) v1.textContent = valText;
+        if (v2) v2.textContent = valText;
+        AudioEngine.updateSetting(settingKey, parseFloat(s2.value));
       });
       s2.addEventListener('change', flagUnsavedChanges);
     }
@@ -819,6 +871,12 @@
     if (noiseThreshold) {
       AudioEngine.updateSetting('noiseThreshold', noiseThreshold.value / 100);
     }
+    const noiseCalibrate = document.getElementById('noise-calibrate');
+    if (noiseCalibrate) {
+      AudioEngine.updateSetting('noiseCalibrate', parseFloat(noiseCalibrate.value));
+    }
+    AudioEngine.updateSetting('hissEnabled', hissToggle.checked);
+    AudioEngine.updateSetting('hissAmount', hissAmount.value / 100);
     AudioEngine.updateSetting('eqEnabled', eqToggle.checked);
     AudioEngine.updateSetting('eqAmount', eqAmount.value / 100);
     AudioEngine.updateSetting('reverbEnabled', reverbToggle.checked);
@@ -841,6 +899,9 @@
     currentFile = null;
     isProcessing = false;
     isInitiallyCleaned = false;
+    trimStartPercent = 0.0;
+    trimEndPercent = 1.0;
+    updateTrimUI();
 
     dropZone.classList.remove('has-file');
     dropZone.innerHTML = `
@@ -849,6 +910,11 @@
       <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, M4A, OGG, FLAC</p>
     `;
     fileInput.value = '';
+
+    const noiseFileInput = document.getElementById('noise-file-input');
+    if (noiseFileInput) noiseFileInput.value = '';
+    const noiseSampleStatus = document.getElementById('noise-sample-status');
+    if (noiseSampleStatus) noiseSampleStatus.style.display = 'none';
 
     const processInitialContainer = document.getElementById('process-initial-container');
     if (processInitialContainer) {
@@ -894,6 +960,33 @@
     noiseToggle.checked = newSettings.noiseEnabled;
     noiseAmount.value = Math.round(newSettings.noiseAmount * 100);
     noiseValue.textContent = noiseAmount.value + '%';
+
+    if (newSettings.noiseCalibrate !== undefined) {
+      const calibrateVal = newSettings.noiseCalibrate;
+      const calibrateText = (calibrateVal > 0 ? '+' : '') + calibrateVal + ' dB';
+      const mainCalibrate = document.getElementById('noise-calibrate');
+      const mainCalibrateVal = document.getElementById('noise-calibrate-value');
+      const quickCalibrate = document.getElementById('quick-noise-calibrate');
+      const quickCalibrateVal = document.getElementById('quick-noise-calibrate-value');
+
+      if (mainCalibrate) mainCalibrate.value = calibrateVal;
+      if (mainCalibrateVal) mainCalibrateVal.textContent = calibrateText;
+      if (quickCalibrate) quickCalibrate.value = calibrateVal;
+      if (quickCalibrateVal) quickCalibrateVal.textContent = calibrateText;
+    }
+
+    if (newSettings.hissEnabled !== undefined) {
+      hissToggle.checked = newSettings.hissEnabled;
+    }
+    if (newSettings.hissAmount !== undefined) {
+      hissAmount.value = Math.round(newSettings.hissAmount * 100);
+      hissValue.textContent = hissAmount.value + '%';
+      
+      const quickHiss = document.getElementById('quick-hiss-amount');
+      const quickHissVal = document.getElementById('quick-hiss-value');
+      if (quickHiss) quickHiss.value = hissAmount.value;
+      if (quickHissVal) quickHissVal.textContent = hissAmount.value + '%';
+    }
 
     eqToggle.checked = newSettings.eqEnabled;
     eqAmount.value = Math.round(newSettings.eqAmount * 100);
@@ -951,8 +1044,26 @@
   }
 
   async function exportAudio() {
-    const buffer = AudioEngine.getCleanedBuffer();
+    let buffer = AudioEngine.getCleanedBuffer();
     if (!buffer) return;
+
+    // Apply trim boundaries (crop marker subsegment)
+    if (trimStartPercent > 0.0 || trimEndPercent < 1.0) {
+      const sampleRate = buffer.sampleRate;
+      const startSample = Math.floor(trimStartPercent * buffer.length);
+      const endSample = Math.floor(trimEndPercent * buffer.length);
+      const trimmedLength = Math.max(1, endSample - startSample);
+
+      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, trimmedLength, sampleRate);
+      const croppedBuffer = offlineCtx.createBuffer(buffer.numberOfChannels, trimmedLength, sampleRate);
+
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        const srcData = buffer.getChannelData(ch);
+        const dstData = croppedBuffer.getChannelData(ch);
+        dstData.set(srcData.subarray(startSample, endSample));
+      }
+      buffer = croppedBuffer;
+    }
 
     const filename = currentFile ? currentFile.name : 'recording.mp3';
 
@@ -1156,6 +1267,160 @@
     if (AudioEngine.getIsPlaying()) {
       const analyser = AudioEngine.getAnalyser();
       if (analyser) WaveformVisualizer.startFrequencyVisualizer(analyser);
+    }
+  }
+
+  // ============================================
+  // MANUAL NOISE ESTIMATION & TRIMMING
+  // ============================================
+  function bindNoiseUploadEvents() {
+    const btnUploadNoise = document.getElementById('btn-upload-noise');
+    const noiseFileInput = document.getElementById('noise-file-input');
+    const noiseSampleStatus = document.getElementById('noise-sample-status');
+
+    if (btnUploadNoise && noiseFileInput) {
+      btnUploadNoise.addEventListener('click', () => {
+        noiseFileInput.click();
+      });
+
+      noiseFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (noiseSampleStatus) {
+          noiseSampleStatus.style.color = 'var(--text-muted)';
+          noiseSampleStatus.textContent = 'Learning profile...';
+          noiseSampleStatus.style.display = 'inline-block';
+        }
+
+        try {
+          const profile = await learnNoiseProfileFromFile(file);
+          AudioEngine.updateSetting('manualNoiseProfile', profile);
+
+          if (noiseSampleStatus) {
+            noiseSampleStatus.style.color = 'var(--accent-cyan)';
+            noiseSampleStatus.textContent = '✓ Noise Profile Loaded';
+            noiseSampleStatus.style.display = 'inline-block';
+          }
+          flagUnsavedChanges();
+        } catch (err) {
+          console.error('Failed to learn noise profile:', err);
+          if (noiseSampleStatus) {
+            noiseSampleStatus.style.color = 'var(--accent-red)';
+            noiseSampleStatus.textContent = 'Error learning noise';
+            noiseSampleStatus.style.display = 'inline-block';
+          }
+        }
+      });
+    }
+  }
+
+  async function learnNoiseProfileFromFile(file) {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const channelData = audioBuffer.getChannelData(0);
+    const fftSize = 2048;
+    const hopSize = 512;
+    const numFrames = Math.floor((channelData.length - fftSize) / hopSize) + 1;
+
+    const avgProfile = new Float32Array(fftSize / 2 + 1);
+    const frame = new Float32Array(fftSize);
+
+    // Hann window
+    const window = new Float32Array(fftSize);
+    for (let i = 0; i < fftSize; i++) {
+      window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)));
+    }
+
+    let processed = 0;
+    for (let f = 0; f < numFrames && f < 100; f++) {
+      const offset = f * hopSize;
+      for (let i = 0; i < fftSize; i++) {
+        frame[i] = (offset + i < channelData.length) ? channelData[offset + i] * window[i] : 0;
+      }
+      const { real, imag } = NoiseReduction.fft(frame);
+      for (let i = 0; i <= fftSize / 2; i++) {
+        avgProfile[i] += Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+      }
+      processed++;
+    }
+
+    if (processed > 0) {
+      for (let i = 0; i <= fftSize / 2; i++) {
+        avgProfile[i] /= processed;
+      }
+    }
+
+    ctx.close();
+    return avgProfile;
+  }
+
+  function bindTrimEvents() {
+    const leftHandle = document.getElementById('trim-left');
+    const rightHandle = document.getElementById('trim-right');
+
+    if (leftHandle && rightHandle) {
+      leftHandle.addEventListener('mousedown', (e) => startTrimDrag(e, 'left'));
+      leftHandle.addEventListener('touchstart', (e) => startTrimDrag(e, 'left'));
+
+      rightHandle.addEventListener('mousedown', (e) => startTrimDrag(e, 'right'));
+      rightHandle.addEventListener('touchstart', (e) => startTrimDrag(e, 'right'));
+    }
+  }
+
+  function startTrimDrag(e, type) {
+    e.preventDefault();
+    if (AudioEngine.getIsPlaying()) {
+      AudioEngine.pause();
+      updatePlayButton(false);
+      WaveformVisualizer.stopFrequencyVisualizer();
+      stopPlaybackTimer();
+    }
+
+    const rect = waveformContainer.getBoundingClientRect();
+
+    function onDrag(moveEvent) {
+      const clientX = moveEvent.touches ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const pos = (clientX - rect.left) / rect.width;
+      const clamped = Math.max(0, Math.min(pos, 1));
+
+      if (type === 'left') {
+        trimStartPercent = Math.max(0, Math.min(clamped, trimEndPercent - 0.05));
+      } else {
+        trimEndPercent = Math.max(trimStartPercent + 0.05, Math.min(clamped, 1));
+      }
+
+      updateTrimUI();
+    }
+
+    function onDragEnd() {
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('mouseup', onDragEnd);
+      document.removeEventListener('touchmove', onDrag);
+      document.removeEventListener('touchend', onDragEnd);
+      flagUnsavedChanges();
+    }
+
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('touchmove', onDrag, { passive: true });
+    document.addEventListener('touchend', onDragEnd);
+  }
+
+  function updateTrimUI() {
+    const leftHandle = document.getElementById('trim-left');
+    const rightHandle = document.getElementById('trim-right');
+    const overlayLeft = document.getElementById('trim-overlay-left');
+    const overlayRight = document.getElementById('trim-overlay-right');
+
+    if (leftHandle) leftHandle.style.left = (trimStartPercent * 100) + '%';
+    if (rightHandle) rightHandle.style.left = (trimEndPercent * 100) + '%';
+    if (overlayLeft) overlayLeft.style.width = (trimStartPercent * 100) + '%';
+    if (overlayRight) {
+      overlayRight.style.left = (trimEndPercent * 100) + '%';
+      overlayRight.style.width = ((1.0 - trimEndPercent) * 100) + '%';
     }
   }
 

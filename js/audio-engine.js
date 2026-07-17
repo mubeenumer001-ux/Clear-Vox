@@ -21,6 +21,8 @@ const AudioEngine = (() => {
     noiseEnabled: true,
     noiseAmount: 0.7,
     noiseThreshold: 0.5,
+    noiseCalibrate: 0.0,
+    manualNoiseProfile: null,
     eqEnabled: true,
     eqAmount: 0.5,
     reverbEnabled: true,
@@ -30,7 +32,9 @@ const AudioEngine = (() => {
     deEsserAmount: 0.5,
     silenceTrimEnabled: false,
     silenceTrimMode: 'compress', // 'compress' or 'remove'
-    silenceTrimSensitivity: 0.5
+    silenceTrimSensitivity: 0.5,
+    hissEnabled: false,
+    hissAmount: 0.0
   };
 
   // ---- Presets ----
@@ -46,12 +50,13 @@ const AudioEngine = (() => {
       icon: '🎮',
       desc: 'PC fan & keyboard noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.9, noiseThreshold: 0.7,
+        noiseEnabled: true, noiseAmount: 0.9, noiseThreshold: 0.7, noiseCalibrate: 0.0, manualNoiseProfile: null,
         eqEnabled: true, eqAmount: 0.4,
         reverbEnabled: true, reverbAmount: 0.3,
         deEsserEnabled: false, deEsserAmount: 0.5,
         levelEnabled: true,
-        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5
+        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
+        hissEnabled: false, hissAmount: 0.0
       }
     },
     outdoor: {
@@ -59,12 +64,13 @@ const AudioEngine = (() => {
       icon: '🌿',
       desc: 'Wind & traffic noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.95, noiseThreshold: 0.8,
+        noiseEnabled: true, noiseAmount: 0.95, noiseThreshold: 0.8, noiseCalibrate: 0.0, manualNoiseProfile: null,
         eqEnabled: true, eqAmount: 0.6,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
         levelEnabled: true,
-        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5
+        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
+        hissEnabled: true, hissAmount: 0.4
       }
     },
     podcast: {
@@ -72,12 +78,13 @@ const AudioEngine = (() => {
       icon: '🎙️',
       desc: 'Room echo & clarity',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.7, noiseThreshold: 0.5,
+        noiseEnabled: true, noiseAmount: 0.7, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null,
         eqEnabled: true, eqAmount: 0.5,
         reverbEnabled: true, reverbAmount: 0.8,
         deEsserEnabled: true, deEsserAmount: 0.6,
         levelEnabled: true,
-        silenceTrimEnabled: true, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5
+        silenceTrimEnabled: true, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
+        hissEnabled: false, hissAmount: 0.0
       }
     },
     voiceover: {
@@ -85,12 +92,13 @@ const AudioEngine = (() => {
       icon: '🎤',
       desc: 'Broadcast-ready voice',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.8, noiseThreshold: 0.5,
+        noiseEnabled: true, noiseAmount: 0.8, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null,
         eqEnabled: true, eqAmount: 0.7,
         reverbEnabled: true, reverbAmount: 0.6,
         deEsserEnabled: true, deEsserAmount: 0.5,
         levelEnabled: true,
-        silenceTrimEnabled: true, silenceTrimMode: 'remove', silenceTrimSensitivity: 0.5
+        silenceTrimEnabled: true, silenceTrimMode: 'remove', silenceTrimSensitivity: 0.5,
+        hissEnabled: false, hissAmount: 0.0
       }
     },
     music: {
@@ -98,12 +106,13 @@ const AudioEngine = (() => {
       icon: '🎵',
       desc: 'Gentle cleanup',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.4, noiseThreshold: 0.3,
+        noiseEnabled: true, noiseAmount: 0.4, noiseThreshold: 0.3, noiseCalibrate: 0.0, manualNoiseProfile: null,
         eqEnabled: true, eqAmount: 0.3,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
         levelEnabled: false,
-        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.3
+        silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.3,
+        hissEnabled: false, hissAmount: 0.0
       }
     }
   };
@@ -164,6 +173,7 @@ const AudioEngine = (() => {
 
     const steps = [];
     if (settings.noiseEnabled) steps.push('noise');
+    if (settings.hissEnabled) steps.push('hiss');
     if (settings.reverbEnabled) steps.push('reverb');
     if (settings.eqEnabled) steps.push('eq');
     if (settings.deEsserEnabled) steps.push('deesser');
@@ -180,7 +190,16 @@ const AudioEngine = (() => {
 
       switch (step) {
         case 'noise':
-          buffer = NoiseReduction.applyNoiseGate(buffer, settings.noiseAmount, settings.noiseThreshold);
+          buffer = NoiseReduction.applyNoiseGate(
+            buffer, 
+            settings.noiseAmount, 
+            settings.noiseThreshold, 
+            settings.manualNoiseProfile, 
+            settings.noiseCalibrate
+          );
+          break;
+        case 'hiss':
+          buffer = await applyHissReductionOffline(buffer, settings.hissAmount);
           break;
         case 'reverb':
           buffer = NoiseReduction.applyDeReverb(buffer, settings.reverbAmount);
@@ -219,6 +238,7 @@ const AudioEngine = (() => {
   function getStepName(step) {
     return {
       noise: 'Noise Removal',
+      hiss: 'Hiss Reduction',
       reverb: 'De-Reverb',
       eq: 'Studio Magic EQ',
       deesser: 'De-Esser',
@@ -254,6 +274,26 @@ const AudioEngine = (() => {
     highShelf.type = 'highshelf'; highShelf.frequency.value = 10000; highShelf.gain.value = 2 * scale;
 
     source.connect(highpass).connect(lowShelf).connect(lowMidCut).connect(presence).connect(highShelf).connect(offlineCtx.destination);
+    source.start(0);
+    return offlineCtx.startRendering();
+  }
+
+  /**
+   * Apply lowpass filter stage for Hiss Reduction above 8kHz
+   */
+  async function applyHissReductionOffline(buffer, amount) {
+    const { numberOfChannels, sampleRate, length } = buffer;
+    const offlineCtx = new OfflineAudioContext(numberOfChannels, length, sampleRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = buffer;
+
+    const cutoff = 20000 - (12000 * amount); // 20kHz down to 8kHz
+    const filter = offlineCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoff;
+    filter.Q.value = 0.707;
+
+    source.connect(filter).connect(offlineCtx.destination);
     source.start(0);
     return offlineCtx.startRendering();
   }

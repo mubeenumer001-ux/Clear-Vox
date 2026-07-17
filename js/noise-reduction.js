@@ -13,7 +13,7 @@ const NoiseReduction = (() => {
    * @param {number} sensitivity - Threshold sensitivity multiplier (0-1)
    * @returns {AudioBuffer} - Processed audio buffer
    */
-  function applyNoiseGate(audioBuffer, strength = 0.7, sensitivity = 0.5) {
+  function applyNoiseGate(audioBuffer, strength = 0.7, sensitivity = 0.5, manualNoiseProfile = null, dbShift = 0) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const length = audioBuffer.length;
@@ -26,7 +26,7 @@ const NoiseReduction = (() => {
       const inputData = audioBuffer.getChannelData(ch);
       const outputData = outputBuffer.getChannelData(ch);
 
-      processChannelNoiseReduction(inputData, outputData, strength, sensitivity, sampleRate);
+      processChannelNoiseReduction(inputData, outputData, strength, sensitivity, sampleRate, manualNoiseProfile, dbShift);
     }
 
     return outputBuffer;
@@ -35,7 +35,7 @@ const NoiseReduction = (() => {
   /**
    * Process a single channel for noise reduction using adaptive spectral gating
    */
-  function processChannelNoiseReduction(input, output, strength, sensitivity, sampleRate) {
+  function processChannelNoiseReduction(input, output, strength, sensitivity, sampleRate, manualNoiseProfile = null, dbShift = 0) {
     const fftSize = 2048;
     const hopSize = fftSize / 4;
     const numFrames = Math.floor((input.length - fftSize) / hopSize) + 1;
@@ -70,9 +70,16 @@ const NoiseReduction = (() => {
     const magnitudes = new Float32Array(fftSize / 2 + 1);
     const phases = new Float32Array(fftSize / 2 + 1);
 
-    // Initialize noise floor with first frame magnitude
-    const firstSpectrum = computeMagnitudeSpectrum(input, 0, fftSize, window);
-    noiseFloor.set(firstSpectrum);
+    // Initialize noise floor with first frame magnitude or manual profile
+    if (manualNoiseProfile) {
+      noiseFloor.set(manualNoiseProfile);
+    } else {
+      const firstSpectrum = computeMagnitudeSpectrum(input, 0, fftSize, window);
+      noiseFloor.set(firstSpectrum);
+    }
+
+    // Convert dbShift to a linear multiplier factor (dB to amplitude multiplier)
+    const shiftMultiplier = Math.pow(10, dbShift / 20);
 
     // Process each frame
     for (let frame = 0; frame < numFrames; frame++) {
@@ -96,15 +103,19 @@ const NoiseReduction = (() => {
         magnitudes[i] = mag;
         phases[i] = Math.atan2(im, r);
 
-        // Adaptive asymmetric time-constant filtering (Minima tracking)
-        if (mag < noiseFloor[i]) {
-          noiseFloor[i] = alphaDown * noiseFloor[i] + (1 - alphaDown) * mag;
+        // Adaptive asymmetric time-constant filtering (Minima tracking) OR lock to manual noise profile
+        if (manualNoiseProfile) {
+          noiseFloor[i] = manualNoiseProfile[i];
         } else {
-          noiseFloor[i] = alphaUp * noiseFloor[i] + (1 - alphaUp) * mag;
+          if (mag < noiseFloor[i]) {
+            noiseFloor[i] = alphaDown * noiseFloor[i] + (1 - alphaDown) * mag;
+          } else {
+            noiseFloor[i] = alphaUp * noiseFloor[i] + (1 - alphaUp) * mag;
+          }
         }
 
-        // Apply scaling sensitivity multiplier
-        const noiseEstimate = noiseFloor[i] * thresholdMultiplier;
+        // Apply scaling sensitivity multiplier and calibrate decibel shift
+        const noiseEstimate = noiseFloor[i] * thresholdMultiplier * shiftMultiplier;
 
         // Berouti spectral subtraction
         const magSquared = mag * mag;
@@ -363,6 +374,7 @@ const NoiseReduction = (() => {
   // Public API
   return {
     applyNoiseGate,
-    applyDeReverb
+    applyDeReverb,
+    fft
   };
 })();

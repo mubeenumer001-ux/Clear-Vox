@@ -130,6 +130,7 @@
       </p>
       <div class="hero-chips" id="feature-chips-container">
         <button class="chip" data-feature="noise">🔇 Noise Removal</button>
+        <button class="chip" data-feature="hiss">🧹 Hiss Reduction</button>
         <button class="chip" data-feature="eq">🎛️ Studio EQ</button>
         <button class="chip" data-feature="reverb">🏠 De-Reverb</button>
         <button class="chip" data-feature="deesser">🦷 De-Esser</button>
@@ -146,6 +147,11 @@
         <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, M4A, OGG, FLAC</p>
         <input type="file" id="file-input" accept="audio/*" multiple>
       </div>
+      <div style="display: flex; justify-content: center; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 8px;">
+        <button class="btn btn-secondary" id="btn-upload-noise" type="button">📤 Upload Noise Sample (Optional)</button>
+        <span id="noise-sample-status" style="font-size: 0.72rem; color: var(--accent-cyan); display: none; font-weight: 600; text-shadow: 0 0 6px rgba(6,182,212,0.3);">✓ Noise Profile Loaded</span>
+        <input type="file" id="noise-file-input" accept="audio/*" style="display: none;">
+      </div>
     </section>
 
     <!-- Quick Settings Panel -->
@@ -161,7 +167,7 @@
           <div class="control-label">Noise Removal Strength</div>
           <div class="control-desc">Adjust the depth and threshold of the noise filter</div>
         </div>
-        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between;">
+        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between; flex-wrap: wrap;">
           <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
             <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Intensity:</div>
             <div class="range-slider" style="flex: 1;">
@@ -175,6 +181,27 @@
               <input type="range" id="quick-noise-threshold" min="0" max="100" value="50">
               <div class="range-value" id="quick-noise-threshold-value">50%</div>
             </div>
+          </div>
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Calibrate:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="quick-noise-calibrate" min="-30" max="30" value="0">
+              <div class="range-value" id="quick-noise-calibrate-value">0 dB</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="quick-ctrl-hiss" class="control-item" style="display: none;">
+        <div class="control-icon deesser">🧹</div>
+        <div class="control-info">
+          <div class="control-label">Hiss Reduction Amount</div>
+          <div class="control-desc">Damp high-frequency ambient hiss and mic noise</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="quick-hiss-amount" min="0" max="100" value="0">
+            <div class="range-value" id="quick-hiss-value">0%</div>
           </div>
         </div>
       </div>
@@ -288,6 +315,18 @@
       <div class="waveform-container" id="waveform-container">
         <canvas id="waveform-canvas"></canvas>
         <div class="waveform-cursor" id="waveform-cursor"></div>
+        <!-- Trim Overlays -->
+        <div class="trim-overlay trim-overlay-left" id="trim-overlay-left" style="width: 0%;"></div>
+        <div class="trim-overlay trim-overlay-right" id="trim-overlay-right" style="right: 0%; width: 0%;"></div>
+        <!-- Trim Handles -->
+        <div class="trim-handle trim-left" id="trim-left" style="left: 0%;">
+          <div class="trim-handle-line"></div>
+          <div class="trim-handle-tab">◀</div>
+        </div>
+        <div class="trim-handle trim-right" id="trim-right" style="left: 100%;">
+          <div class="trim-handle-line"></div>
+          <div class="trim-handle-tab">▶</div>
+        </div>
       </div>
       <div class="waveform-time">
         <span id="time-current">0:00</span>
@@ -358,7 +397,7 @@
           <div class="control-label">Noise Removal</div>
           <div class="control-desc">Remove background hum, wind & ambient noise</div>
         </div>
-        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between;">
+        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between; flex-wrap: wrap;">
           <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
             <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Intensity:</div>
             <div class="range-slider" style="flex: 1;">
@@ -373,8 +412,35 @@
               <div class="range-value" id="noise-threshold-value">50%</div>
             </div>
           </div>
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Calibrate:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="noise-calibrate" min="-30" max="30" value="0">
+              <div class="range-value" id="noise-calibrate-value">0 dB</div>
+            </div>
+          </div>
           <label class="toggle-switch" style="margin-left: auto;">
             <input type="checkbox" id="noise-toggle" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Hiss Reduction -->
+      <div class="control-item">
+        <div class="control-icon deesser">🧹</div>
+        <div class="control-info">
+          <div class="control-label">Hiss Reduction</div>
+          <div class="control-desc">Damp high-frequency ambient room hiss and mic noise</div>
+        </div>
+        <div class="control-right">
+          <div class="range-slider">
+            <input type="range" id="hiss-amount" min="0" max="100" value="0">
+            <div class="range-value" id="hiss-value">0%</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="hiss-toggle">
             <div class="toggle-track"></div>
             <div class="toggle-thumb"></div>
           </label>
