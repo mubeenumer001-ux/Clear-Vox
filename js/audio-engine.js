@@ -20,6 +20,7 @@ const AudioEngine = (() => {
   let settings = {
     noiseEnabled: true,
     noiseAmount: 0.7,
+    noiseThreshold: 0.5,
     eqEnabled: true,
     eqAmount: 0.5,
     reverbEnabled: true,
@@ -45,7 +46,7 @@ const AudioEngine = (() => {
       icon: '🎮',
       desc: 'PC fan & keyboard noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.9,
+        noiseEnabled: true, noiseAmount: 0.9, noiseThreshold: 0.7,
         eqEnabled: true, eqAmount: 0.4,
         reverbEnabled: true, reverbAmount: 0.3,
         deEsserEnabled: false, deEsserAmount: 0.5,
@@ -58,7 +59,7 @@ const AudioEngine = (() => {
       icon: '🌿',
       desc: 'Wind & traffic noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.95,
+        noiseEnabled: true, noiseAmount: 0.95, noiseThreshold: 0.8,
         eqEnabled: true, eqAmount: 0.6,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
@@ -71,7 +72,7 @@ const AudioEngine = (() => {
       icon: '🎙️',
       desc: 'Room echo & clarity',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.7,
+        noiseEnabled: true, noiseAmount: 0.7, noiseThreshold: 0.5,
         eqEnabled: true, eqAmount: 0.5,
         reverbEnabled: true, reverbAmount: 0.8,
         deEsserEnabled: true, deEsserAmount: 0.6,
@@ -84,7 +85,7 @@ const AudioEngine = (() => {
       icon: '🎤',
       desc: 'Broadcast-ready voice',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.8,
+        noiseEnabled: true, noiseAmount: 0.8, noiseThreshold: 0.5,
         eqEnabled: true, eqAmount: 0.7,
         reverbEnabled: true, reverbAmount: 0.6,
         deEsserEnabled: true, deEsserAmount: 0.5,
@@ -97,7 +98,7 @@ const AudioEngine = (() => {
       icon: '🎵',
       desc: 'Gentle cleanup',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.4,
+        noiseEnabled: true, noiseAmount: 0.4, noiseThreshold: 0.3,
         eqEnabled: true, eqAmount: 0.3,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
@@ -131,14 +132,35 @@ const AudioEngine = (() => {
   }
 
   /**
+   * Apply low-cut (high-pass) filter at 100Hz to eliminate low-frequency rumble
+   */
+  async function applyLowCut(buffer) {
+    const { numberOfChannels, sampleRate, length } = buffer;
+    const offlineCtx = new OfflineAudioContext(numberOfChannels, length, sampleRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = buffer;
+
+    const highpass = offlineCtx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 100;
+    highpass.Q.value = 0.707; // Butterworth filter response
+
+    source.connect(highpass).connect(offlineCtx.destination);
+    source.start(0);
+    return offlineCtx.startRendering();
+  }
+
+  /**
    * Run the full processing pipeline
-   * Order: Noise Gate → De-Reverb → EQ → De-Esser → Auto-Level → Silence Trim
+   * Order: Low-Cut → Noise Gate → De-Reverb → EQ → De-Esser → Auto-Level → Silence Trim
    */
   async function processAudio(onProgress) {
     if (!originalBuffer) throw new Error('No audio loaded');
     init();
 
-    let buffer = copyBuffer(originalBuffer);
+    // Apply low-cut filter at the very start of the processing chain
+    if (onProgress) onProgress(0, 'Applying 100Hz Low-Cut...');
+    let buffer = await applyLowCut(originalBuffer);
 
     const steps = [];
     if (settings.noiseEnabled) steps.push('noise');
@@ -158,7 +180,7 @@ const AudioEngine = (() => {
 
       switch (step) {
         case 'noise':
-          buffer = NoiseReduction.applyNoiseGate(buffer, settings.noiseAmount);
+          buffer = NoiseReduction.applyNoiseGate(buffer, settings.noiseAmount, settings.noiseThreshold);
           break;
         case 'reverb':
           buffer = NoiseReduction.applyDeReverb(buffer, settings.reverbAmount);

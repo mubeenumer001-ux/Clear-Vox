@@ -198,6 +198,17 @@
 
     // Controls
     bindControl(noiseToggle, noiseAmount, noiseValue, 'noiseEnabled', 'noiseAmount');
+
+    const noiseThreshold = document.getElementById('noise-threshold');
+    const noiseThresholdValue = document.getElementById('noise-threshold-value');
+    if (noiseThreshold) {
+      noiseThreshold.addEventListener('input', () => {
+        if (noiseThresholdValue) noiseThresholdValue.textContent = noiseThreshold.value + '%';
+        AudioEngine.updateSetting('noiseThreshold', noiseThreshold.value / 100);
+      });
+      noiseThreshold.addEventListener('change', scheduleReprocess);
+    }
+
     bindControl(eqToggle, eqAmount, eqValue, 'eqEnabled', 'eqAmount');
     bindControl(reverbToggle, reverbAmount, reverbValue, 'reverbEnabled', 'reverbAmount');
     bindControl(deesserToggle, deesserAmount, deesserValue, 'deEsserEnabled', 'deEsserAmount');
@@ -363,6 +374,7 @@
   function setupQuickSettingsSliders() {
     // Two-way sync primary and quick-settings sliders
     linkTwoSliders('quick-noise-amount', 'noise-amount', 'quick-noise-value', 'noise-value', 'noiseAmount');
+    linkTwoSliders('quick-noise-threshold', 'noise-threshold', 'quick-noise-threshold-value', 'noise-threshold-value', 'noiseThreshold');
     linkTwoSliders('quick-eq-amount', 'eq-amount', 'quick-eq-value', 'eq-value', 'eqAmount');
     linkTwoSliders('quick-reverb-amount', 'reverb-amount', 'quick-reverb-value', 'reverb-value', 'reverbAmount');
     linkTwoSliders('quick-deesser-amount', 'deesser-amount', 'quick-deesser-value', 'deesser-value', 'deEsserAmount');
@@ -699,6 +711,10 @@
   function syncSettingsFromUI() {
     AudioEngine.updateSetting('noiseEnabled', noiseToggle.checked);
     AudioEngine.updateSetting('noiseAmount', noiseAmount.value / 100);
+    const noiseThreshold = document.getElementById('noise-threshold');
+    if (noiseThreshold) {
+      AudioEngine.updateSetting('noiseThreshold', noiseThreshold.value / 100);
+    }
     AudioEngine.updateSetting('eqEnabled', eqToggle.checked);
     AudioEngine.updateSetting('eqAmount', eqAmount.value / 100);
     AudioEngine.updateSetting('reverbEnabled', reverbToggle.checked);
@@ -791,6 +807,19 @@
     });
 
     // Sync two-way sliders
+    if (newSettings.noiseThreshold !== undefined) {
+      const threshVal = Math.round(newSettings.noiseThreshold * 100);
+      const mainThresh = document.getElementById('noise-threshold');
+      const mainThreshVal = document.getElementById('noise-threshold-value');
+      const quickThresh = document.getElementById('quick-noise-threshold');
+      const quickThreshVal = document.getElementById('quick-noise-threshold-value');
+
+      if (mainThresh) mainThresh.value = threshVal;
+      if (mainThreshVal) mainThreshVal.textContent = threshVal + '%';
+      if (quickThresh) quickThresh.value = threshVal;
+      if (quickThreshVal) quickThreshVal.textContent = threshVal + '%';
+    }
+
     document.getElementById('quick-noise-amount').value = noiseAmount.value;
     document.getElementById('quick-noise-value').textContent = noiseAmount.value + '%';
     document.getElementById('quick-eq-amount').value = eqAmount.value;

@@ -153,16 +153,26 @@
     <section class="glass-card" id="quick-settings-panel" style="display: none; margin-top: 1.5rem; margin-bottom: 1.5rem;">
       <h2 class="section-title"><span class="icon">🎛️</span> Feature Adjustments</h2>
       
-      <div id="quick-ctrl-noise" class="control-item" style="display: none;">
+      <div id="quick-ctrl-noise" class="control-item" style="display: none; flex-wrap: wrap;">
         <div class="control-icon noise">🔇</div>
         <div class="control-info">
           <div class="control-label">Noise Removal Strength</div>
-          <div class="control-desc">Adjust the depth of the noise filter</div>
+          <div class="control-desc">Adjust the depth and threshold of the noise filter</div>
         </div>
-        <div class="control-right">
-          <div class="range-slider">
-            <input type="range" id="quick-noise-amount" min="0" max="100" value="70">
-            <div class="range-value" id="quick-noise-value">70%</div>
+        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between;">
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Intensity:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="quick-noise-amount" min="0" max="100" value="70">
+              <div class="range-value" id="quick-noise-value">70%</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Sensitivity:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="quick-noise-threshold" min="0" max="100" value="50">
+              <div class="range-value" id="quick-noise-threshold-value">50%</div>
+            </div>
           </div>
         </div>
       </div>
@@ -362,18 +372,28 @@
       <h2 class="section-title"><span class="icon">⚙️</span> Processing Controls</h2>
 
       <!-- Noise Removal -->
-      <div class="control-item">
+      <div class="control-item" style="flex-wrap: wrap;">
         <div class="control-icon noise">🔇</div>
         <div class="control-info">
           <div class="control-label">Noise Removal</div>
           <div class="control-desc">Remove background hum, wind & ambient noise</div>
         </div>
-        <div class="control-right">
-          <div class="range-slider">
-            <input type="range" id="noise-amount" min="0" max="100" value="70">
-            <div class="range-value" id="noise-value">70%</div>
+        <div class="control-right" style="width: 100%; gap: 1rem; margin-top: 0.5rem; justify-content: space-between;">
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Intensity:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="noise-amount" min="0" max="100" value="70">
+              <div class="range-value" id="noise-value">70%</div>
+            </div>
           </div>
-          <label class="toggle-switch">
+          <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 200px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); min-width: 60px;">Sensitivity:</div>
+            <div class="range-slider" style="flex: 1;">
+              <input type="range" id="noise-threshold" min="0" max="100" value="50">
+              <div class="range-value" id="noise-threshold-value">50%</div>
+            </div>
+          </div>
+          <label class="toggle-switch" style="margin-left: auto;">
             <input type="checkbox" id="noise-toggle" checked>
             <div class="toggle-track"></div>
             <div class="toggle-thumb"></div>

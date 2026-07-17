@@ -2,17 +2,18 @@
  * noise-reduction.js
  * Spectral gating noise reduction & de-reverb using Web Audio API
  * Processes audio offline in the frequency domain
+ * Includes Adaptive Noise Estimation (Asymmetric minima tracking filter)
  */
 
 const NoiseReduction = (() => {
   /**
    * Applies spectral gating noise reduction to an AudioBuffer
    * @param {AudioBuffer} audioBuffer - The input audio buffer
-   * @param {number} strength - Noise reduction strength (0-1)
-   * @param {BaseAudioContext} ctx - Audio context for creating buffers
+   * @param {number} strength - Noise reduction strength / intensity (0-1)
+   * @param {number} sensitivity - Threshold sensitivity multiplier (0-1)
    * @returns {AudioBuffer} - Processed audio buffer
    */
-  function applyNoiseGate(audioBuffer, strength = 0.7) {
+  function applyNoiseGate(audioBuffer, strength = 0.7, sensitivity = 0.5) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const length = audioBuffer.length;
@@ -25,16 +26,16 @@ const NoiseReduction = (() => {
       const inputData = audioBuffer.getChannelData(ch);
       const outputData = outputBuffer.getChannelData(ch);
 
-      processChannelNoiseReduction(inputData, outputData, strength, sampleRate);
+      processChannelNoiseReduction(inputData, outputData, strength, sensitivity, sampleRate);
     }
 
     return outputBuffer;
   }
 
   /**
-   * Process a single channel for noise reduction using spectral gating
+   * Process a single channel for noise reduction using adaptive spectral gating
    */
-  function processChannelNoiseReduction(input, output, strength, sampleRate) {
+  function processChannelNoiseReduction(input, output, strength, sensitivity, sampleRate) {
     const fftSize = 2048;
     const hopSize = fftSize / 4;
     const numFrames = Math.floor((input.length - fftSize) / hopSize) + 1;
@@ -45,55 +46,72 @@ const NoiseReduction = (() => {
       window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)));
     }
 
-    // Estimate noise profile from first 0.5 seconds (assumed to be noise)
-    const noiseFrames = Math.min(Math.ceil((sampleRate * 0.5) / hopSize), numFrames);
-    const noiseProfile = new Float32Array(fftSize / 2 + 1);
+    // Adaptive noise floor tracking
+    const noiseFloor = new Float32Array(fftSize / 2 + 1);
+    
+    // Time constants for asymmetric tracking filter
+    const dt = hopSize / sampleRate;
+    const tcDown = 0.06; // 60ms decay to adapt to silent intervals quickly
+    const tcUp = 9.0;    // 9s attack to prevent speech energy from polluting estimated noise
+    const alphaDown = Math.exp(-dt / tcDown);
+    const alphaUp = Math.exp(-dt / tcUp);
 
-    // Accumulate noise spectrum
-    for (let frame = 0; frame < noiseFrames; frame++) {
-      const offset = frame * hopSize;
-      const spectrum = computeMagnitudeSpectrum(input, offset, fftSize, window);
-      for (let i = 0; i < spectrum.length; i++) {
-        noiseProfile[i] += spectrum[i] / noiseFrames;
-      }
-    }
-
-    // Scale noise threshold by strength
-    const threshold = new Float32Array(noiseProfile.length);
-    for (let i = 0; i < threshold.length; i++) {
-      threshold[i] = noiseProfile[i] * (1 + strength * 3);
-    }
+    // Multiplier for threshold based on sensitivity slider (0 to 1)
+    // 0 -> 1.0x, 0.5 -> 2.8x, 1.0 -> 7.0x noise floor
+    const thresholdMultiplier = 1.0 + sensitivity * 6.0;
+    const gainFloor = Math.max(0.01, 1.0 - strength * 0.98); // Dynamic gain floor based on intensity
 
     // Initialize output to zero
     output.fill(0);
     const windowSum = new Float32Array(input.length);
+
+    // Temp buffers for frames
+    const frameData = new Float32Array(fftSize);
+    const magnitudes = new Float32Array(fftSize / 2 + 1);
+    const phases = new Float32Array(fftSize / 2 + 1);
+
+    // Initialize noise floor with first frame magnitude
+    const firstSpectrum = computeMagnitudeSpectrum(input, 0, fftSize, window);
+    noiseFloor.set(firstSpectrum);
 
     // Process each frame
     for (let frame = 0; frame < numFrames; frame++) {
       const offset = frame * hopSize;
 
       // Extract and window the frame
-      const frameData = new Float32Array(fftSize);
       for (let i = 0; i < fftSize; i++) {
-        if (offset + i < input.length) {
-          frameData[i] = input[offset + i] * window[i];
-        }
+        frameData[i] = (offset + i < input.length) ? input[offset + i] * window[i] : 0;
       }
 
       // FFT
       const { real, imag } = fft(frameData);
 
-      // Spectral gating
+      // Compute magnitude, phase, and update adaptive noise floor
       for (let i = 0; i <= fftSize / 2; i++) {
-        const magnitude = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+        const r = real[i], im = imag[i];
+        const mag = Math.sqrt(r * r + im * im);
+        magnitudes[i] = mag;
+        phases[i] = Math.atan2(im, r);
 
-        if (magnitude < threshold[i]) {
-          // Below noise floor — attenuate
-          const gain = Math.max(0, 1 - (threshold[i] / (magnitude + 1e-10)) * strength);
+        // Adaptive asymmetric time-constant filtering (Minima tracking)
+        if (mag < noiseFloor[i]) {
+          noiseFloor[i] = alphaDown * noiseFloor[i] + (1 - alphaDown) * mag;
+        } else {
+          noiseFloor[i] = alphaUp * noiseFloor[i] + (1 - alphaUp) * mag;
+        }
+
+        // Apply spectral gating based on dynamic noise floor
+        const localThreshold = noiseFloor[i] * thresholdMultiplier;
+
+        if (mag < localThreshold) {
+          // Dynamic smooth sigmoid gating based on decibels below threshold
+          const dbDiff = 20 * Math.log10((mag + 1e-10) / (localThreshold + 1e-10));
+          const factor = 1 / (1 + Math.exp(-dbDiff * 0.5));
+          const gain = gainFloor + (1 - gainFloor) * factor;
+
           real[i] *= gain;
           imag[i] *= gain;
 
-          // Mirror for negative frequencies
           if (i > 0 && i < fftSize / 2) {
             real[fftSize - i] *= gain;
             imag[fftSize - i] *= gain;
