@@ -1421,10 +1421,10 @@ body {
 }
 
 .preset-chip.active {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
   border-color: transparent;
   color: white;
-  box-shadow: var(--shadow-glow-sm);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
 .preset-chip-icon { font-size: 1rem; }

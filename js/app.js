@@ -497,7 +497,7 @@
   // ============================================
   // PROCESSING CONFIRMATION (MANUAL APPLY)
   // ============================================
-  function flagUnsavedChanges() {
+  function flagUnsavedChanges(isManualOverride = true) {
     if (!currentFile || !isInitiallyCleaned) return;
 
     hasUnsavedChanges = true;
@@ -508,6 +508,12 @@
       updatePlayButton(false);
       WaveformVisualizer.stopFrequencyVisualizer();
       stopPlaybackTimer();
+    }
+
+    if (isManualOverride) {
+      presetsBar.querySelectorAll('.preset-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.preset === 'custom');
+      });
     }
 
     // Display unsaved badges and Apply button
@@ -594,6 +600,11 @@
     stopPlaybackTimer();
     clearUnsavedChanges();
     isInitiallyCleaned = false;
+
+    // Set preset chip to custom by default
+    presetsBar.querySelectorAll('.preset-chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.preset === 'custom');
+    });
 
     // Display file name & size card
     showFileInfo(file);
@@ -1031,7 +1042,7 @@
     document.getElementById('quick-deesser-value').textContent = deesserAmount.value + '%';
 
     syncChipsFromSettings();
-    flagUnsavedChanges();
+    flagUnsavedChanges(false);
   }
 
   // ============================================
