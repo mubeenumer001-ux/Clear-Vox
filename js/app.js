@@ -513,20 +513,20 @@
   function handleFiles(files) {
     if (!files || files.length === 0) return;
 
-    // Filter strictly MP3 files
-    const mp3Files = Array.from(files).filter(file => 
-      file.type === 'audio/mpeg' || file.type === 'audio/mp3' || file.name.endsWith('.mp3')
+    // Filter any audio files
+    const audioFiles = Array.from(files).filter(file => 
+      file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|wma)$/i.test(file.name)
     );
 
-    if (mp3Files.length === 0) {
-      alert('Please upload MP3 files only.');
+    if (audioFiles.length === 0) {
+      alert('Please upload audio files only.');
       return;
     }
 
-    if (mp3Files.length === 1) {
-      handleSingleFile(mp3Files[0]);
+    if (audioFiles.length === 1) {
+      handleSingleFile(audioFiles[0]);
     } else {
-      handleBatchFiles(mp3Files);
+      handleBatchFiles(audioFiles);
     }
   }
 
@@ -654,13 +654,16 @@
       ? (file.size / 1024).toFixed(1) + ' KB'
       : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
 
+    const extMatch = file.name.match(/\.([^.]+)$/);
+    const ext = extMatch ? extMatch[1].toUpperCase() : 'Audio';
+
     dropZone.classList.add('has-file');
     dropZone.innerHTML = `
       <div class="file-info">
         <div class="file-info-icon">🎵</div>
         <div class="file-info-details">
           <div class="file-info-name">${escapeHtml(file.name)}</div>
-          <div class="file-info-meta">${size} · MP3 Audio</div>
+          <div class="file-info-meta">${size} · ${ext} File</div>
         </div>
         <button class="file-remove-btn" id="file-remove-btn" title="Remove file">✕</button>
       </div>

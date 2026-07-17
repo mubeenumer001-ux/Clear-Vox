@@ -30,13 +30,13 @@ const BatchProcessor = (() => {
   }
 
   /**
-   * Add files to the queue (Strictly MP3 format)
+   * Add files to the queue (Any audio format)
    * @param {FileList|Array<File>} files
    */
   function addFiles(files) {
     for (const file of files) {
-      const isMp3 = file.type === 'audio/mpeg' || file.type === 'audio/mp3' || file.name.endsWith('.mp3');
-      if (!isMp3) continue;
+      const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac|wma)$/i.test(file.name);
+      if (!isAudio) continue;
 
       queue.push({
         id: generateId(),
