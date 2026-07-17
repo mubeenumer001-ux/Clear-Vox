@@ -19,23 +19,25 @@ const AudioEngine = (() => {
   // ---- Settings ----
   let settings = {
     noiseEnabled: true,
-    noiseAmount: 0.7,
-    noiseThreshold: 0.5,
+    noiseAmount: 0.55,
+    noiseThreshold: 0.4,
     noiseCalibrate: 0.0,
     manualNoiseProfile: null,
     noiseSmoothing: 0.0,
     eqEnabled: true,
-    eqAmount: 0.5,
+    eqAmount: 0.6,
     reverbEnabled: true,
-    reverbAmount: 0.5,
+    reverbAmount: 0.3,
     levelEnabled: true,
+    levelAmount: 0.4,
     deEsserEnabled: false,
     deEsserAmount: 0.5,
     silenceTrimEnabled: false,
-    silenceTrimMode: 'compress', // 'compress' or 'remove'
+    silenceTrimMode: 'compress',
     silenceTrimSensitivity: 0.5,
     hissEnabled: false,
-    hissAmount: 0.0
+    hissAmount: 0.0,
+    wetDryMix: 0.12
   };
 
   // ---- Presets ----
@@ -55,9 +57,10 @@ const AudioEngine = (() => {
         eqEnabled: true, eqAmount: 0.4,
         reverbEnabled: true, reverbAmount: 0.3,
         deEsserEnabled: false, deEsserAmount: 0.5,
-        levelEnabled: true,
+        levelEnabled: true, levelAmount: 0.5,
         silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
-        hissEnabled: false, hissAmount: 0.0
+        hissEnabled: false, hissAmount: 0.0,
+        wetDryMix: 0.10
       }
     },
     outdoor: {
@@ -69,9 +72,10 @@ const AudioEngine = (() => {
         eqEnabled: true, eqAmount: 0.6,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
-        levelEnabled: true,
+        levelEnabled: true, levelAmount: 0.5,
         silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
-        hissEnabled: true, hissAmount: 0.4
+        hissEnabled: true, hissAmount: 0.4,
+        wetDryMix: 0.08
       }
     },
     podcast: {
@@ -80,12 +84,13 @@ const AudioEngine = (() => {
       desc: 'Room echo & clarity',
       settings: {
         noiseEnabled: true, noiseAmount: 0.6, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.88,
-        eqEnabled: true, eqAmount: 0.5,
+        eqEnabled: true, eqAmount: 0.6,
         reverbEnabled: true, reverbAmount: 0.5,
         deEsserEnabled: true, deEsserAmount: 0.6,
-        levelEnabled: true,
+        levelEnabled: true, levelAmount: 0.45,
         silenceTrimEnabled: true, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
-        hissEnabled: false, hissAmount: 0.0
+        hissEnabled: false, hissAmount: 0.0,
+        wetDryMix: 0.12
       }
     },
     voiceover: {
@@ -97,9 +102,10 @@ const AudioEngine = (() => {
         eqEnabled: true, eqAmount: 0.7,
         reverbEnabled: true, reverbAmount: 0.6,
         deEsserEnabled: true, deEsserAmount: 0.5,
-        levelEnabled: true,
+        levelEnabled: true, levelAmount: 0.55,
         silenceTrimEnabled: true, silenceTrimMode: 'remove', silenceTrimSensitivity: 0.5,
-        hissEnabled: false, hissAmount: 0.0
+        hissEnabled: false, hissAmount: 0.0,
+        wetDryMix: 0.10
       }
     },
     music: {
@@ -111,9 +117,10 @@ const AudioEngine = (() => {
         eqEnabled: true, eqAmount: 0.3,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
-        levelEnabled: false,
+        levelEnabled: false, levelAmount: 0.3,
         silenceTrimEnabled: false, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.3,
-        hissEnabled: false, hissAmount: 0.0
+        hissEnabled: false, hissAmount: 0.0,
+        wetDryMix: 0.15
       }
     }
   };
@@ -162,7 +169,7 @@ const AudioEngine = (() => {
 
   /**
    * Run the full processing pipeline
-   * Order: Low-Cut → Noise Gate → De-Reverb → EQ → De-Esser → Auto-Level → Silence Trim
+   * Order: Low-Cut → De-Reverb → Noise Gate → Hiss → EQ → De-Esser → Auto-Level → Silence Trim → Wet/Dry Mix
    */
   async function processAudio(onProgress) {
     if (!originalBuffer) throw new Error('No audio loaded');
@@ -209,13 +216,13 @@ const AudioEngine = (() => {
           buffer = await applyHissReductionOffline(buffer, settings.hissAmount);
           break;
         case 'eq':
-          buffer = await applyStudioEQ(buffer, settings.eqAmount);
+          buffer = await applyStudioEQ(buffer, settings.eqAmount, settings.noiseEnabled);
           break;
         case 'deesser':
           buffer = DeEsser.apply(buffer, settings.deEsserAmount);
           break;
         case 'level':
-          buffer = applyAutoLevel(buffer);
+          buffer = applyAutoLevel(buffer, settings.levelAmount);
           break;
         case 'silence':
           buffer = SilenceTrimmer.apply(buffer, {
@@ -232,6 +239,19 @@ const AudioEngine = (() => {
           (currentStep / totalSteps) * 100,
           currentStep === totalSteps ? 'Done!' : `Applying ${nextName}...`
         );
+      }
+    }
+
+    // Wet/Dry mix — blend a fraction of original unprocessed audio back in
+    const dryAmount = settings.wetDryMix;
+    if (dryAmount > 0 && originalBuffer && buffer.length === originalBuffer.length) {
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        const wet = buffer.getChannelData(ch);
+        const dry = originalBuffer.getChannelData(ch);
+        const wetGain = 1.0 - dryAmount;
+        for (let i = 0; i < wet.length; i++) {
+          wet[i] = wet[i] * wetGain + dry[i] * dryAmount;
+        }
       }
     }
 
@@ -252,9 +272,9 @@ const AudioEngine = (() => {
   }
 
   /**
-   * Apply Studio Magic EQ
+   * Apply Studio Magic EQ with optional Body Recovery boost when noise removal is active
    */
-  async function applyStudioEQ(buffer, amount) {
+  async function applyStudioEQ(buffer, amount, noiseActive = false) {
     const { numberOfChannels, sampleRate, length } = buffer;
     const offlineCtx = new OfflineAudioContext(numberOfChannels, length, sampleRate);
     const source = offlineCtx.createBufferSource();
@@ -268,6 +288,13 @@ const AudioEngine = (() => {
     const lowShelf = offlineCtx.createBiquadFilter();
     lowShelf.type = 'lowshelf'; lowShelf.frequency.value = 250; lowShelf.gain.value = 2.5 * scale;
 
+    // Body Recovery — compensate for vocal warmth stripped by spectral gating
+    const bodyRecovery = offlineCtx.createBiquadFilter();
+    bodyRecovery.type = 'peaking';
+    bodyRecovery.frequency.value = 200; // Center of 150-250Hz vocal body range
+    bodyRecovery.Q.value = 0.8; // Wide, gentle bell
+    bodyRecovery.gain.value = noiseActive ? 3.0 * scale : 0; // Only boost when noise removal is on
+
     const lowMidCut = offlineCtx.createBiquadFilter();
     lowMidCut.type = 'peaking'; lowMidCut.frequency.value = 400; lowMidCut.Q.value = 1.5; lowMidCut.gain.value = -2 * scale;
 
@@ -277,7 +304,7 @@ const AudioEngine = (() => {
     const highShelf = offlineCtx.createBiquadFilter();
     highShelf.type = 'highshelf'; highShelf.frequency.value = 10000; highShelf.gain.value = 2 * scale;
 
-    source.connect(highpass).connect(lowShelf).connect(lowMidCut).connect(presence).connect(highShelf).connect(offlineCtx.destination);
+    source.connect(highpass).connect(lowShelf).connect(bodyRecovery).connect(lowMidCut).connect(presence).connect(highShelf).connect(offlineCtx.destination);
     source.start(0);
     return offlineCtx.startRendering();
   }
@@ -305,20 +332,24 @@ const AudioEngine = (() => {
   /**
    * Apply auto-leveling
    */
-  function applyAutoLevel(buffer) {
+  function applyAutoLevel(buffer, amount = 0.4) {
     const { numberOfChannels, sampleRate, length } = buffer;
     const ctx = new OfflineAudioContext(numberOfChannels, length, sampleRate);
     const outputBuffer = ctx.createBuffer(numberOfChannels, length, sampleRate);
+
+    // Remap 0-1 amount to a max ratio of 4:1 with soft knee
+    // amount=0 → ratio=1 (no compression), amount=1 → ratio=4
+    const ratio = 1.0 + amount * 3.0;
+    const knee = 6.0 + (1.0 - amount) * 6.0; // Softer knee at lower amounts (6-12 dB)
 
     for (let ch = 0; ch < numberOfChannels; ch++) {
       const input = buffer.getChannelData(ch);
       const output = outputBuffer.getChannelData(ch);
 
-      const attack = Math.exp(-1 / (sampleRate * 0.01));
-      const release = Math.exp(-1 / (sampleRate * 0.1));
-      const threshold = 0.15;
-      const ratio = 4;
-      const makeupGain = 1.8;
+      const attack = Math.exp(-1 / (sampleRate * 0.015)); // 15ms attack (gentler)
+      const release = Math.exp(-1 / (sampleRate * 0.15)); // 150ms release (smoother)
+      const threshold = 0.18;
+      const makeupGain = 1.0 + amount * 0.6; // Scale makeup: 1.0 to 1.6
       let envelope = 0;
 
       for (let i = 0; i < input.length; i++) {
@@ -329,12 +360,32 @@ const AudioEngine = (() => {
 
         let gain = 1;
         if (envelope > threshold) {
-          gain = (threshold * Math.pow(envelope / threshold, 1 / ratio)) / (envelope + 1e-10);
+          // Soft-knee compression
+          const overDB = 20 * Math.log10(envelope / threshold + 1e-10);
+          const kneeStart = -knee / 2;
+          const kneeEnd = knee / 2;
+
+          let compGainDB = 0;
+          if (overDB <= kneeStart) {
+            compGainDB = 0; // Below knee — no compression
+          } else if (overDB >= kneeEnd) {
+            compGainDB = overDB * (1 - 1 / ratio); // Full compression
+          } else {
+            // Soft knee quadratic transition
+            const x = overDB - kneeStart;
+            compGainDB = (x * x * (1 - 1 / ratio)) / (2 * knee);
+          }
+
+          gain = Math.pow(10, -compGainDB / 20);
         }
         output[i] = input[i] * gain * makeupGain;
       }
 
-      for (let i = 0; i < output.length; i++) output[i] = Math.tanh(output[i]);
+      // Soft saturation instead of hard tanh clipping
+      for (let i = 0; i < output.length; i++) {
+        const x = output[i];
+        output[i] = x / (1 + Math.abs(x) * 0.15); // Gentle soft-clip
+      }
     }
 
     // Peak normalize to -1dB

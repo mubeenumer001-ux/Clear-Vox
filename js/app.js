@@ -402,15 +402,7 @@
     linkTwoSliders('quick-eq-amount', 'eq-amount', 'quick-eq-value', 'eq-value', 'eqAmount');
     linkTwoSliders('quick-reverb-amount', 'reverb-amount', 'quick-reverb-value', 'reverb-value', 'reverbAmount');
     linkTwoSliders('quick-deesser-amount', 'deesser-amount', 'quick-deesser-value', 'deesser-value', 'deEsserAmount');
-
-    // Level settings slider
-    const quickLevelAmount = document.getElementById('quick-level-amount');
-    const quickLevelValue = document.getElementById('quick-level-value');
-    if (quickLevelAmount) {
-      quickLevelAmount.addEventListener('input', () => {
-        quickLevelValue.textContent = quickLevelAmount.value + '%';
-      });
-    }
+    linkTwoSliders('quick-level-amount', 'level-amount', 'quick-level-value', 'level-value', 'levelAmount');
 
     // Silence sensitivity slider
     const quickSilenceSens = document.getElementById('quick-silence-sensitivity');
@@ -1012,6 +1004,20 @@
     deesserValue.textContent = deesserAmount.value + '%';
 
     levelToggle.checked = newSettings.levelEnabled;
+
+    // Sync level amount slider
+    if (newSettings.levelAmount !== undefined) {
+      const levelVal = Math.round(newSettings.levelAmount * 100);
+      const mainLevel = document.getElementById('level-amount');
+      const mainLevelVal = document.getElementById('level-value');
+      const quickLevel = document.getElementById('quick-level-amount');
+      const quickLevelVal = document.getElementById('quick-level-value');
+
+      if (mainLevel) mainLevel.value = levelVal;
+      if (mainLevelVal) mainLevelVal.textContent = levelVal + '%';
+      if (quickLevel) quickLevel.value = levelVal;
+      if (quickLevelVal) quickLevelVal.textContent = levelVal + '%';
+    }
 
     silenceToggle.checked = newSettings.silenceTrimEnabled;
     silenceModeToggle.querySelectorAll('.mode-btn').forEach(b => {
