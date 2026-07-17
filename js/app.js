@@ -257,7 +257,7 @@
     chipsContainer.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const feature = chip.dataset.feature;
-        
+
         if (feature === 'video') {
           // Special toggle for video Support representation
           chip.classList.toggle('active');
@@ -276,7 +276,7 @@
 
         const settings = AudioEngine.getSettings();
         const nextState = !settings[enabledKey];
-        
+
         // Update AudioEngine
         AudioEngine.updateSetting(enabledKey, nextState);
 
@@ -498,7 +498,7 @@
       progressBar.style.width = '100%';
       processingText.textContent = 'All done! ✨';
       await sleep(500);
-      
+
       if (myProcessId !== currentProcessId) return;
       hideProcessing();
       showPlayerUI();
@@ -601,7 +601,7 @@
         <button class="file-remove-btn" id="file-remove-btn" title="Remove file">✕</button>
       </div>
     `;
-    
+
     // Wire up red X button
     document.getElementById('file-remove-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1095,7 +1095,7 @@
         progressBar.style.width = '100%';
         processingText.textContent = 'All done! ✨';
         await sleep(350);
-        
+
         if (myProcessId !== currentProcessId) return;
         hideProcessing();
         showPlayerUI();
