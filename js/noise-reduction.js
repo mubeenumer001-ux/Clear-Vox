@@ -87,6 +87,9 @@ const NoiseReduction = (() => {
       const { real, imag } = fft(frameData);
 
       // Compute magnitude, phase, and update adaptive noise floor
+      const alpha = 2.0 + strength * 1.5; // Oversubtraction factor (2.0 to 3.5)
+      const beta = 0.02; // Strict spectral floor to preserve natural ambient cushion
+
       for (let i = 0; i <= fftSize / 2; i++) {
         const r = real[i], im = imag[i];
         const mag = Math.sqrt(r * r + im * im);
@@ -100,22 +103,27 @@ const NoiseReduction = (() => {
           noiseFloor[i] = alphaUp * noiseFloor[i] + (1 - alphaUp) * mag;
         }
 
-        // Apply spectral gating based on dynamic noise floor
-        const localThreshold = noiseFloor[i] * thresholdMultiplier;
+        // Apply scaling sensitivity multiplier
+        const noiseEstimate = noiseFloor[i] * thresholdMultiplier;
 
-        if (mag < localThreshold) {
-          // Dynamic smooth sigmoid gating based on decibels below threshold
-          const dbDiff = 20 * Math.log10((mag + 1e-10) / (localThreshold + 1e-10));
-          const factor = 1 / (1 + Math.exp(-dbDiff * 0.5));
-          const gain = gainFloor + (1 - gainFloor) * factor;
+        // Berouti spectral subtraction
+        const magSquared = mag * mag;
+        const noiseSquared = noiseEstimate * noiseEstimate;
 
-          real[i] *= gain;
-          imag[i] *= gain;
+        let cleanPower = magSquared - alpha * noiseSquared;
+        if (cleanPower < beta * noiseSquared) {
+          cleanPower = beta * noiseSquared;
+        }
 
-          if (i > 0 && i < fftSize / 2) {
-            real[fftSize - i] *= gain;
-            imag[fftSize - i] *= gain;
-          }
+        const cleanMag = Math.sqrt(cleanPower);
+        const gain = Math.min(1.0, cleanMag / (mag + 1e-10));
+
+        real[i] *= gain;
+        imag[i] *= gain;
+
+        if (i > 0 && i < fftSize / 2) {
+          real[fftSize - i] = real[i];
+          imag[fftSize - i] = -imag[i];
         }
       }
 
