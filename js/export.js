@@ -1,52 +1,31 @@
 /**
  * export.js
- * Export cleaned audio as WAV or MP3
+ * Export cleaned audio as MP3 only
  * MP3 encoding via lamejs (lazy-loaded from CDN)
  */
 
 const AudioExporter = (() => {
-  let lameEncoder = null;
-
   /**
-   * Export audio in the selected format
-   * @param {AudioBuffer} buffer
-   * @param {string} filename
-   * @param {string} format - 'wav', 'mp3-128', 'mp3-320'
-   * @param {function} onProgress
+   * Export audio directly to MP3 320kbps
+   * @param {AudioBuffer} buffer - Cleaned AudioBuffer
+   * @param {string} filename - Original file name
+   * @param {function} onProgress - Progress reporting callback
    */
-  async function exportAudio(buffer, filename, format = 'wav', onProgress) {
-    let blob;
-    let ext;
-
-    switch (format) {
-      case 'mp3-128':
-        if (onProgress) onProgress('Encoding MP3 (128kbps)...');
-        blob = await encodeMP3(buffer, 128);
-        ext = '.mp3';
-        break;
-      case 'mp3-320':
-        if (onProgress) onProgress('Encoding MP3 (320kbps)...');
-        blob = await encodeMP3(buffer, 320);
-        ext = '.mp3';
-        break;
-      case 'wav':
-      default:
-        blob = audioBufferToWav(buffer);
-        ext = '.wav';
-        break;
-    }
-
+  async function exportAudio(buffer, filename, onProgress) {
+    if (onProgress) onProgress('Encoding high-quality MP3 (320kbps)...');
+    
+    const mp3Blob = await encodeMP3(buffer, 320);
     const baseName = filename.replace(/\.[^/.]+$/, '');
-    const outputName = `${baseName}-clearvox${ext}`;
+    const outputName = `${baseName}-clearvox.mp3`;
 
-    triggerDownload(blob, outputName);
-    return { blob, filename: outputName };
+    triggerDownload(mp3Blob, outputName);
+    return { blob: mp3Blob, filename: outputName };
   }
 
   /**
    * Encode AudioBuffer as MP3 using lamejs
    */
-  async function encodeMP3(buffer, kbps = 128) {
+  async function encodeMP3(buffer, kbps = 320) {
     const lamejs = await loadLame();
 
     const sampleRate = buffer.sampleRate;
@@ -76,7 +55,7 @@ const AudioExporter = (() => {
       }
     }
 
-    // Flush remaining
+    // Flush remaining bytes
     const end = mp3Encoder.flush();
     if (end.length > 0) {
       mp3Data.push(end);
@@ -110,68 +89,12 @@ const AudioExporter = (() => {
         if (window.lamejs) {
           resolve(window.lamejs);
         } else {
-          // lamejs sometimes attaches differently
           resolve({ Mp3Encoder: window.Mp3Encoder || window.lamejs?.Mp3Encoder });
         }
       };
       script.onerror = () => reject(new Error('Failed to load MP3 encoder'));
       document.head.appendChild(script);
     });
-  }
-
-  /**
-   * Convert AudioBuffer to WAV Blob
-   */
-  function audioBufferToWav(buffer) {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const bitDepth = 16;
-
-    let interleaved;
-    if (numChannels === 2) {
-      const left = buffer.getChannelData(0);
-      const right = buffer.getChannelData(1);
-      interleaved = new Float32Array(left.length + right.length);
-      for (let i = 0, j = 0; i < left.length; i++, j += 2) {
-        interleaved[j] = left[i];
-        interleaved[j + 1] = right[i];
-      }
-    } else {
-      interleaved = buffer.getChannelData(0);
-    }
-
-    const dataLength = interleaved.length * (bitDepth / 8);
-    const arrayBuffer = new ArrayBuffer(44 + dataLength);
-    const view = new DataView(arrayBuffer);
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataLength, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * numChannels * (bitDepth / 8), true);
-    view.setUint16(32, numChannels * (bitDepth / 8), true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataLength, true);
-
-    let offset = 44;
-    for (let i = 0; i < interleaved.length; i++) {
-      const s = Math.max(-1, Math.min(1, interleaved[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-      offset += 2;
-    }
-
-    return new Blob([arrayBuffer], { type: 'audio/wav' });
-  }
-
-  function writeString(view, offset, string) {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
   }
 
   function triggerDownload(blob, filename) {
@@ -185,28 +108,13 @@ const AudioExporter = (() => {
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   }
 
-  /**
-   * Generate filename from original
-   */
   function generateFilename(originalName) {
-    return originalName.replace(/\.[^/.]+$/, '') + '-clearvox-cleaned.wav';
-  }
-
-  /**
-   * Get available export formats
-   */
-  function getFormats() {
-    return [
-      { id: 'wav', label: 'WAV (Lossless)', desc: 'Best quality, large file' },
-      { id: 'mp3-320', label: 'MP3 320kbps', desc: 'High quality, smaller file' },
-      { id: 'mp3-128', label: 'MP3 128kbps', desc: 'Good quality, smallest file' }
-    ];
+    return originalName.replace(/\.[^/.]+$/, '') + '-clearvox-cleaned.mp3';
   }
 
   return {
     exportAudio,
-    audioBufferToWav,
-    generateFilename,
-    getFormats
+    encodeMP3,
+    generateFilename
   };
 })();

@@ -1,6 +1,7 @@
 /**
  * batch-processor.js
  * Multi-file batch processing queue with sequential execution
+ * Restricted strictly to MP3 input and MP3 zip output
  */
 
 const BatchProcessor = (() => {
@@ -29,12 +30,13 @@ const BatchProcessor = (() => {
   }
 
   /**
-   * Add files to the queue
+   * Add files to the queue (Strictly MP3 format)
    * @param {FileList|Array<File>} files
    */
   function addFiles(files) {
     for (const file of files) {
-      if (!file.type.startsWith('audio/') && !VideoProcessor.isVideoFile(file)) continue;
+      const isMp3 = file.type === 'audio/mpeg' || file.type === 'audio/mp3' || file.name.endsWith('.mp3');
+      if (!isMp3) continue;
 
       queue.push({
         id: generateId(),
@@ -129,7 +131,7 @@ const BatchProcessor = (() => {
   }
 
   /**
-   * Download all completed files as a ZIP
+   * Download all completed files as a ZIP containing MP3s
    */
   async function downloadAllAsZip(onProgress) {
     const completedItems = queue.filter(item => item.state === STATE.DONE && item.result);
@@ -144,7 +146,7 @@ const BatchProcessor = (() => {
     if (onProgress) onProgress('Creating ZIP archive...');
 
     for (const item of completedItems) {
-      const filename = item.result.filename || `clearvox-${item.file.name}.wav`;
+      const filename = item.result.filename || `clearvox-${item.file.name.replace(/\.[^/.]+$/, '')}.mp3`;
       zip.file(filename, item.result.blob);
     }
 

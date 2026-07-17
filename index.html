@@ -135,7 +135,6 @@
         <button class="chip" data-feature="deesser">🦷 De-Esser</button>
         <button class="chip" data-feature="level">📊 Auto-Level</button>
         <button class="chip" data-feature="silence">✂️ Silence Trim</button>
-        <button class="chip" data-feature="video">🎬 Video Support</button>
       </div>
     </section>
 
@@ -143,15 +142,18 @@
     <section class="glass-card" id="upload-section">
       <div class="drop-zone" id="drop-zone">
         <span class="drop-zone-icon">🎵</span>
-        <p class="drop-zone-text">Drop your audio or video files here</p>
-        <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, OGG, FLAC, M4A, MP4, MOV, WEBM</p>
-        <input type="file" id="file-input" accept="audio/*,video/mp4,video/webm,video/quicktime" multiple>
+        <p class="drop-zone-text">Drop your MP3 file here</p>
+        <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — strictly MP3 format</p>
+        <input type="file" id="file-input" accept="audio/mpeg,audio/mp3,.mp3" multiple>
       </div>
     </section>
 
     <!-- Quick Settings Panel -->
     <section class="glass-card" id="quick-settings-panel" style="display: none; margin-top: 1.5rem; margin-bottom: 1.5rem;">
-      <h2 class="section-title"><span class="icon">🎛️</span> Feature Adjustments</h2>
+      <h2 class="section-title">
+        <span class="icon">🎛️</span> Feature Adjustments
+        <span id="quick-unsaved-badge" class="unsaved-badge" style="display: none; margin-left: auto; color: var(--accent-pink); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; animation: pulse-glow 2s infinite;">● Unsaved Changes</span>
+      </h2>
       
       <div id="quick-ctrl-noise" class="control-item" style="display: none; flex-wrap: wrap;">
         <div class="control-icon noise">🔇</div>
@@ -250,21 +252,14 @@
           </div>
         </div>
       </div>
-
-      <div id="quick-ctrl-video" class="control-item" style="display: none;">
-        <div class="control-icon video">🎬</div>
-        <div class="control-info">
-          <div class="control-label">Video Sound Enhancer Mix</div>
-          <div class="control-desc">Dry/Wet mix of the clean audio with the video</div>
-        </div>
-        <div class="control-right">
-          <div class="range-slider">
-            <input type="range" id="quick-video-mix" min="0" max="100" value="100">
-            <div class="range-value" id="quick-video-value">100%</div>
-          </div>
-        </div>
-      </div>
     </section>
+
+    <!-- Apply Changes Confirmation Button -->
+    <div id="apply-changes-container" style="display: none; justify-content: center; margin: 1.5rem 0; animation: fadeInUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; z-index: 10;">
+      <button class="btn btn-primary" id="btn-apply-changes" style="width: 100%; max-width: 440px; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em; padding: 14px 28px; box-shadow: var(--shadow-glow-md); gap: 8px;">
+        ⚡ Apply Changes to Audio
+      </button>
+    </div>
 
     <!-- Processing Log (Step-by-step feedback) -->
     <section class="glass-card processing-status" id="processing-status">
@@ -304,36 +299,11 @@
         <span id="toggle-text">Cleaned</span>
       </button>
 
-      <!-- Export with format selector -->
-      <div class="export-group">
-        <button class="btn btn-export" id="btn-export" title="Download cleaned audio">
-          <span>📥</span>
-          <span id="export-label">Export WAV</span>
-        </button>
-        <div class="export-dropdown" id="export-dropdown">
-          <button class="export-option active" data-format="wav">
-            <span class="export-opt-icon">📄</span>
-            <span class="export-opt-info">
-              <span class="export-opt-name">WAV (Lossless)</span>
-              <span class="export-opt-desc">Best quality, large file</span>
-            </span>
-          </button>
-          <button class="export-option" data-format="mp3-320">
-            <span class="export-opt-icon">🎵</span>
-            <span class="export-opt-info">
-              <span class="export-opt-name">MP3 320kbps</span>
-              <span class="export-opt-desc">High quality, smaller file</span>
-            </span>
-          </button>
-          <button class="export-option" data-format="mp3-128">
-            <span class="export-opt-icon">🎵</span>
-            <span class="export-opt-info">
-              <span class="export-opt-name">MP3 128kbps</span>
-              <span class="export-opt-desc">Good quality, smallest file</span>
-            </span>
-          </button>
-        </div>
-      </div>
+      <!-- Direct MP3 Export -->
+      <button class="btn btn-export" id="btn-export" title="Download Cleaned MP3">
+        <span>📥</span>
+        <span id="export-label">Download MP3</span>
+      </button>
     </section>
 
     <!-- Smart Presets -->
@@ -369,7 +339,10 @@
 
     <!-- Processing Controls -->
     <section class="glass-card controls-panel" id="controls-panel">
-      <h2 class="section-title"><span class="icon">⚙️</span> Processing Controls</h2>
+      <h2 class="section-title">
+        <span class="icon">⚙️</span> Processing Controls
+        <span id="main-unsaved-badge" class="unsaved-badge" style="display: none; margin-left: auto; color: var(--accent-pink); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; animation: pulse-glow 2s infinite;">● Unsaved Changes</span>
+      </h2>
 
       <!-- Noise Removal -->
       <div class="control-item" style="flex-wrap: wrap;">
@@ -535,7 +508,6 @@
   <script src="js/audio-engine.js"></script>
   <script src="js/waveform.js"></script>
   <script src="js/export.js"></script>
-  <script src="js/video-processor.js"></script>
   <script src="js/batch-processor.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/app.js"></script>

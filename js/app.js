@@ -1,6 +1,7 @@
 /**
  * app.js
  * Main application controller — wires up auth, UI, presets, batch, export, and all modules
+ * Refactored to focus exclusively on MP3 input/export and manual adjustment confirmation
  */
 
 (function () {
@@ -42,7 +43,6 @@
   const btnToggle = document.getElementById('btn-toggle');
   const btnExport = document.getElementById('btn-export');
   const exportLabel = document.getElementById('export-label');
-  const exportDropdown = document.getElementById('export-dropdown');
   const playIcon = document.getElementById('play-icon');
   const playText = document.getElementById('play-text');
   const toggleText = document.getElementById('toggle-text');
@@ -70,9 +70,8 @@
   let currentFile = null;
   let playbackTimer = null;
   let isProcessing = false;
-  let reprocessTimeout = null;
-  let selectedExportFormat = 'wav';
   let currentProcessId = 0; // Async cancel group id
+  let hasUnsavedChanges = false;
 
   // All processing step definitions for the log
   const ALL_STEPS = [
@@ -96,6 +95,10 @@
     bindBatchEvents();
     setupFeatureChips();
     setupQuickSettingsSliders();
+
+    // Bind Apply Changes confirmation button
+    document.getElementById('btn-apply-changes')?.addEventListener('click', applyChanges);
+
     checkAuthState();
   }
 
@@ -199,6 +202,7 @@
     // Controls
     bindControl(noiseToggle, noiseAmount, noiseValue, 'noiseEnabled', 'noiseAmount');
 
+    // Threshold sensitivity manual slider
     const noiseThreshold = document.getElementById('noise-threshold');
     const noiseThresholdValue = document.getElementById('noise-threshold-value');
     if (noiseThreshold) {
@@ -206,7 +210,7 @@
         if (noiseThresholdValue) noiseThresholdValue.textContent = noiseThreshold.value + '%';
         AudioEngine.updateSetting('noiseThreshold', noiseThreshold.value / 100);
       });
-      noiseThreshold.addEventListener('change', scheduleReprocess);
+      noiseThreshold.addEventListener('change', flagUnsavedChanges);
     }
 
     bindControl(eqToggle, eqAmount, eqValue, 'eqEnabled', 'eqAmount');
@@ -216,13 +220,13 @@
     levelToggle.addEventListener('change', () => {
       AudioEngine.updateSetting('levelEnabled', levelToggle.checked);
       syncChipsFromSettings();
-      scheduleReprocess();
+      flagUnsavedChanges();
     });
 
     silenceToggle.addEventListener('change', () => {
       AudioEngine.updateSetting('silenceTrimEnabled', silenceToggle.checked);
       syncChipsFromSettings();
-      scheduleReprocess();
+      flagUnsavedChanges();
     });
 
     // Silence mode toggle
@@ -231,7 +235,7 @@
         silenceModeToggle.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         AudioEngine.updateSetting('silenceTrimMode', btn.dataset.mode);
-        if (silenceToggle.checked) scheduleReprocess();
+        flagUnsavedChanges();
       });
     });
 
@@ -249,13 +253,13 @@
     toggle.addEventListener('change', () => {
       AudioEngine.updateSetting(toggleKey, toggle.checked);
       syncChipsFromSettings();
-      scheduleReprocess();
+      flagUnsavedChanges();
     });
     slider.addEventListener('input', () => {
       valueEl.textContent = slider.value + '%';
       AudioEngine.updateSetting(amountKey, slider.value / 100);
     });
-    slider.addEventListener('change', scheduleReprocess);
+    slider.addEventListener('change', flagUnsavedChanges);
   }
 
   // ============================================
@@ -269,13 +273,6 @@
       chip.addEventListener('click', () => {
         const feature = chip.dataset.feature;
 
-        if (feature === 'video') {
-          // Special toggle for video Support representation
-          chip.classList.toggle('active');
-          updateQuickSettingsVisibility();
-          return;
-        }
-
         const enabledKey = {
           'noise': 'noiseEnabled',
           'eq': 'eqEnabled',
@@ -287,11 +284,11 @@
 
         const settings = AudioEngine.getSettings();
         const nextState = !settings[enabledKey];
-
+        
         // Update AudioEngine
         AudioEngine.updateSetting(enabledKey, nextState);
 
-        // Sync with primary sliders checked box
+        // Sync check boxes
         const toggleEl = document.getElementById({
           'noise': 'noise-toggle',
           'eq': 'eq-toggle',
@@ -304,7 +301,7 @@
         if (toggleEl) toggleEl.checked = nextState;
 
         syncChipsFromSettings();
-        scheduleReprocess();
+        flagUnsavedChanges();
       });
     });
 
@@ -346,8 +343,7 @@
       { key: 'reverb', enabled: s.reverbEnabled, elementId: 'quick-ctrl-reverb' },
       { key: 'deesser', enabled: s.deEsserEnabled, elementId: 'quick-ctrl-deesser' },
       { key: 'level', enabled: s.levelEnabled, elementId: 'quick-ctrl-level' },
-      { key: 'silence', enabled: s.silenceTrimEnabled, elementId: 'quick-ctrl-silence' },
-      { key: 'video', enabled: document.querySelector('.chip[data-feature="video"]')?.classList.contains('active'), elementId: 'quick-ctrl-video' }
+      { key: 'silence', enabled: s.silenceTrimEnabled, elementId: 'quick-ctrl-silence' }
     ];
 
     let anyActive = false;
@@ -396,7 +392,7 @@
         quickSilenceValue.textContent = quickSilenceSens.value + '%';
         AudioEngine.updateSetting('silenceTrimSensitivity', quickSilenceSens.value / 100);
       });
-      quickSilenceSens.addEventListener('change', scheduleReprocess);
+      quickSilenceSens.addEventListener('change', flagUnsavedChanges);
     }
 
     // Silence mode toggles in quick panel
@@ -412,17 +408,8 @@
           if (siblingBtn) siblingBtn.classList.add('active');
 
           AudioEngine.updateSetting('silenceTrimMode', btn.dataset.mode);
-          if (AudioEngine.getSettings().silenceTrimEnabled) scheduleReprocess();
+          flagUnsavedChanges();
         });
-      });
-    }
-
-    // Video mix slider
-    const quickVideoMix = document.getElementById('quick-video-mix');
-    const quickVideoValue = document.getElementById('quick-video-value');
-    if (quickVideoMix) {
-      quickVideoMix.addEventListener('input', () => {
-        quickVideoValue.textContent = quickVideoMix.value + '%';
       });
     }
   }
@@ -436,19 +423,87 @@
     if (s1 && s2) {
       s1.addEventListener('input', () => {
         s2.value = s1.value;
-        v1.textContent = s1.value + '%';
-        v2.textContent = s1.value + '%';
+        if (v1) v1.textContent = s1.value + '%';
+        if (v2) v2.textContent = s1.value + '%';
         AudioEngine.updateSetting(settingKey, s1.value / 100);
       });
-      s1.addEventListener('change', scheduleReprocess);
+      s1.addEventListener('change', flagUnsavedChanges);
 
       s2.addEventListener('input', () => {
         s1.value = s2.value;
-        v1.textContent = s2.value + '%';
-        v2.textContent = s2.value + '%';
+        if (v1) v1.textContent = s2.value + '%';
+        if (v2) v2.textContent = s2.value + '%';
         AudioEngine.updateSetting(settingKey, s2.value / 100);
       });
-      s2.addEventListener('change', scheduleReprocess);
+      s2.addEventListener('change', flagUnsavedChanges);
+    }
+  }
+
+  // ============================================
+  // PROCESSING CONFIRMATION (MANUAL APPLY)
+  // ============================================
+  function flagUnsavedChanges() {
+    if (!currentFile) return;
+
+    hasUnsavedChanges = true;
+
+    // Pause audio playback instantly on adjustments
+    if (AudioEngine.getIsPlaying()) {
+      AudioEngine.pause();
+      updatePlayButton(false);
+      WaveformVisualizer.stopFrequencyVisualizer();
+      stopPlaybackTimer();
+    }
+
+    // Display unsaved badges and Apply button
+    const quickBadge = document.getElementById('quick-unsaved-badge');
+    const mainBadge = document.getElementById('main-unsaved-badge');
+    const applyWrap = document.getElementById('apply-changes-container');
+
+    if (quickBadge) quickBadge.style.display = 'inline-block';
+    if (mainBadge) mainBadge.style.display = 'inline-block';
+    if (applyWrap) applyWrap.style.display = 'flex';
+  }
+
+  function clearUnsavedChanges() {
+    hasUnsavedChanges = false;
+
+    const quickBadge = document.getElementById('quick-unsaved-badge');
+    const mainBadge = document.getElementById('main-unsaved-badge');
+    const applyWrap = document.getElementById('apply-changes-container');
+
+    if (quickBadge) quickBadge.style.display = 'none';
+    if (mainBadge) mainBadge.style.display = 'none';
+    if (applyWrap) applyWrap.style.display = 'none';
+  }
+
+  async function applyChanges() {
+    if (!currentFile || isProcessing) return;
+
+    clearUnsavedChanges();
+    showProcessingWithLog();
+    updateProcessingLog('decode', 'done');
+
+    const myProcessId = ++currentProcessId;
+
+    try {
+      await processWithLog(myProcessId);
+      if (myProcessId !== currentProcessId) return;
+
+      progressBar.style.width = '100%';
+      processingText.textContent = 'All done! ✨';
+      await sleep(350);
+      
+      if (myProcessId !== currentProcessId) return;
+      hideProcessing();
+      showPlayerUI();
+      clearUnsavedChanges();
+
+    } catch (err) {
+      if (myProcessId !== currentProcessId) return;
+      console.error('Processing error:', err);
+      hideProcessing();
+      showPlayerUI();
     }
   }
 
@@ -458,12 +513,20 @@
   function handleFiles(files) {
     if (!files || files.length === 0) return;
 
-    if (files.length === 1) {
-      // Single file — standard flow
-      handleSingleFile(files[0]);
+    // Filter strictly MP3 files
+    const mp3Files = Array.from(files).filter(file => 
+      file.type === 'audio/mpeg' || file.type === 'audio/mp3' || file.name.endsWith('.mp3')
+    );
+
+    if (mp3Files.length === 0) {
+      alert('Please upload MP3 files only.');
+      return;
+    }
+
+    if (mp3Files.length === 1) {
+      handleSingleFile(mp3Files[0]);
     } else {
-      // Multiple files — batch mode
-      handleBatchFiles(files);
+      handleBatchFiles(mp3Files);
     }
   }
 
@@ -474,6 +537,7 @@
     AudioEngine.stop();
     WaveformVisualizer.stopFrequencyVisualizer();
     stopPlaybackTimer();
+    clearUnsavedChanges();
     showFileInfo(file);
     showProcessingWithLog();
 
@@ -483,18 +547,7 @@
       processingText.textContent = 'Decoding audio...';
       progressBar.style.width = '5%';
 
-      if (VideoProcessor.isVideoFile(file)) {
-        // Video: extract audio first
-        updateProcessingLog('decode', 'active', 'Extracting audio from video...');
-        const audioFile = await VideoProcessor.extractAudio(file, (text) => {
-          if (myProcessId !== currentProcessId) return;
-          processingText.textContent = text;
-        });
-        if (myProcessId !== currentProcessId) return;
-        await AudioEngine.decodeFile(audioFile);
-      } else {
-        await AudioEngine.decodeFile(file);
-      }
+      await AudioEngine.decodeFile(file);
 
       if (myProcessId !== currentProcessId) return;
       updateProcessingLog('decode', 'done');
@@ -502,7 +555,7 @@
       // Sync settings from UI
       syncSettingsFromUI();
 
-      // Process with step-by-step log
+      // Process automatically on first upload
       if (myProcessId !== currentProcessId) return;
       await processWithLog(myProcessId);
 
@@ -510,10 +563,11 @@
       progressBar.style.width = '100%';
       processingText.textContent = 'All done! ✨';
       await sleep(500);
-
+      
       if (myProcessId !== currentProcessId) return;
       hideProcessing();
       showPlayerUI();
+      clearUnsavedChanges();
 
     } catch (err) {
       if (myProcessId !== currentProcessId) return;
@@ -600,20 +654,18 @@
       ? (file.size / 1024).toFixed(1) + ' KB'
       : (file.size / (1024 * 1024)).toFixed(1) + ' MB';
 
-    const isVideo = VideoProcessor.isVideoFile(file);
-
     dropZone.classList.add('has-file');
     dropZone.innerHTML = `
       <div class="file-info">
-        <div class="file-info-icon">${isVideo ? '🎬' : '🎵'}</div>
+        <div class="file-info-icon">🎵</div>
         <div class="file-info-details">
           <div class="file-info-name">${escapeHtml(file.name)}</div>
-          <div class="file-info-meta">${size} · ${isVideo ? 'Video' : 'Audio'}</div>
+          <div class="file-info-meta">${size} · MP3 Audio</div>
         </div>
         <button class="file-remove-btn" id="file-remove-btn" title="Remove file">✕</button>
       </div>
     `;
-
+    
     // Wire up red X button
     document.getElementById('file-remove-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -740,8 +792,8 @@
     dropZone.classList.remove('has-file');
     dropZone.innerHTML = `
       <span class="drop-zone-icon">🎵</span>
-      <p class="drop-zone-text">Drop your audio or video files here</p>
-      <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, OGG, FLAC, M4A, MP4, MOV, WEBM</p>
+      <p class="drop-zone-text">Drop your MP3 file here</p>
+      <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — strictly MP3 format</p>
     `;
     fileInput.value = '';
 
@@ -754,9 +806,7 @@
     presetsPanel.classList.remove('active');
     updatePlayButton(false);
 
-    // Hide quick settings panel
-    const quickPanel = document.getElementById('quick-settings-panel');
-    if (quickPanel) quickPanel.style.display = 'none';
+    clearUnsavedChanges();
   }
 
   // ============================================
@@ -830,42 +880,15 @@
     document.getElementById('quick-deesser-value').textContent = deesserAmount.value + '%';
 
     syncChipsFromSettings();
-    scheduleReprocess();
+    flagUnsavedChanges();
   }
 
   // ============================================
   // EXPORT
   // ============================================
   function bindExportEvents() {
-    btnExport.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      exportDropdown.classList.toggle('open');
-    });
-
     btnExport.addEventListener('click', () => {
-      if (exportDropdown.classList.contains('open')) {
-        exportDropdown.classList.remove('open');
-        return;
-      }
       exportAudio();
-    });
-
-    exportDropdown.querySelectorAll('.export-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        selectedExportFormat = opt.dataset.format;
-        exportDropdown.querySelectorAll('.export-option').forEach(o => o.classList.remove('active'));
-        opt.classList.add('active');
-
-        const labels = { 'wav': 'Export WAV', 'mp3-320': 'Export MP3', 'mp3-128': 'Export MP3' };
-        exportLabel.textContent = labels[selectedExportFormat] || 'Export';
-        exportDropdown.classList.remove('open');
-      });
-    });
-
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.export-group')) {
-        exportDropdown.classList.remove('open');
-      }
     });
   }
 
@@ -873,36 +896,23 @@
     const buffer = AudioEngine.getCleanedBuffer();
     if (!buffer) return;
 
-    const filename = currentFile ? currentFile.name : 'recording.wav';
+    const filename = currentFile ? currentFile.name : 'recording.mp3';
 
-    // If video file loaded, mux back
-    if (currentFile && VideoProcessor.isVideoFile(currentFile)) {
-      try {
-        processingText.textContent = 'Preparing video export...';
-        showProcessing();
-        const wavBlob = VideoProcessor.audioBufferToWavBlob(buffer);
-        const videoBlob = await VideoProcessor.muxAudio(currentFile, wavBlob, (text) => {
-          processingText.textContent = text;
-        });
-        const url = URL.createObjectURL(videoBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename.replace(/\.[^.]+$/, '-clearvox') + (filename.match(/\.[^.]+$/) || ['.mp4'])[0];
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-        hideProcessing();
-        showPlayerUI();
-        return;
-      } catch (err) {
-        console.error('Video export error:', err);
-        hideProcessing();
-        showPlayerUI();
-      }
+    // Show processing status during MP3 encoding
+    processingText.textContent = 'Encoding MP3 (320kbps)...';
+    showProcessing();
+
+    try {
+      await AudioExporter.exportAudio(buffer, filename, (text) => {
+        processingText.textContent = text;
+      });
+      hideProcessing();
+      showPlayerUI();
+    } catch (err) {
+      console.error('Export error:', err);
+      hideProcessing();
+      showPlayerUI();
     }
-
-    await AudioExporter.exportAudio(buffer, filename, selectedExportFormat, (text) => {
-      processingText.textContent = text;
-    });
   }
 
   // ============================================
@@ -936,7 +946,7 @@
         if (onProgress) onProgress(progress, name);
 
         switch (steps[i]) {
-          case 'noise': buffer = NoiseReduction.applyNoiseGate(buffer, s.noiseAmount); break;
+          case 'noise': buffer = NoiseReduction.applyNoiseGate(buffer, s.noiseAmount, s.noiseThreshold); break;
           case 'reverb': buffer = NoiseReduction.applyDeReverb(buffer, s.reverbAmount); break;
           case 'eq': buffer = await applyEQOffline(buffer, s.eqAmount); break;
           case 'deesser': buffer = DeEsser.apply(buffer, s.deEsserAmount); break;
@@ -947,8 +957,9 @@
         await new Promise(r => setTimeout(r, 20));
       }
 
-      const blob = AudioExporter.audioBufferToWav(buffer);
-      const filename = file.name.replace(/\.[^/.]+$/, '') + '-clearvox.wav';
+      // Encode batch item directly to MP3
+      const blob = await AudioExporter.encodeMP3(buffer, 320);
+      const filename = file.name.replace(/\.[^/.]+$/, '') + '-clearvox.mp3';
 
       ctx.close();
       return { buffer, blob, filename };
@@ -1088,65 +1099,6 @@
       const analyser = AudioEngine.getAnalyser();
       if (analyser) WaveformVisualizer.startFrequencyVisualizer(analyser);
     }
-  }
-
-  // ============================================
-  // REPROCESS
-  // ============================================
-  function scheduleReprocess() {
-    presetsBar.querySelectorAll('.preset-chip').forEach(c => {
-      c.classList.toggle('active', c.dataset.preset === 'custom');
-    });
-
-    if (!currentFile || isProcessing) return;
-    if (reprocessTimeout) clearTimeout(reprocessTimeout);
-
-    reprocessTimeout = setTimeout(async () => {
-      const wasPlaying = AudioEngine.getIsPlaying();
-      const currentTime = AudioEngine.getCurrentTime();
-
-      if (wasPlaying) {
-        AudioEngine.pause();
-        updatePlayButton(false);
-        WaveformVisualizer.stopFrequencyVisualizer();
-        stopPlaybackTimer();
-      }
-
-      showProcessingWithLog();
-      updateProcessingLog('decode', 'done');
-
-      const myProcessId = ++currentProcessId;
-
-      try {
-        await processWithLog(myProcessId);
-        if (myProcessId !== currentProcessId) return;
-
-        progressBar.style.width = '100%';
-        processingText.textContent = 'All done! ✨';
-        await sleep(350);
-
-        if (myProcessId !== currentProcessId) return;
-        hideProcessing();
-        showPlayerUI();
-
-        if (wasPlaying) {
-          const duration = AudioEngine.getDuration();
-          if (currentTime < duration) {
-            AudioEngine.seek(currentTime / duration, onPlaybackEnded);
-            AudioEngine.play(onPlaybackEnded);
-            updatePlayButton(true);
-            const analyser = AudioEngine.getAnalyser();
-            if (analyser) WaveformVisualizer.startFrequencyVisualizer(analyser);
-            startPlaybackTimer();
-          }
-        }
-      } catch (err) {
-        if (myProcessId !== currentProcessId) return;
-        console.error('Reprocess error:', err);
-        hideProcessing();
-        showPlayerUI();
-      }
-    }, 600);
   }
 
   // ============================================
