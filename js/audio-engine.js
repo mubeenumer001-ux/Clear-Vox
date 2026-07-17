@@ -23,6 +23,7 @@ const AudioEngine = (() => {
     noiseThreshold: 0.5,
     noiseCalibrate: 0.0,
     manualNoiseProfile: null,
+    noiseSmoothing: 0.0,
     eqEnabled: true,
     eqAmount: 0.5,
     reverbEnabled: true,
@@ -50,7 +51,7 @@ const AudioEngine = (() => {
       icon: '🎮',
       desc: 'PC fan & keyboard noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.9, noiseThreshold: 0.7, noiseCalibrate: 0.0, manualNoiseProfile: null,
+        noiseEnabled: true, noiseAmount: 0.9, noiseThreshold: 0.7, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.0,
         eqEnabled: true, eqAmount: 0.4,
         reverbEnabled: true, reverbAmount: 0.3,
         deEsserEnabled: false, deEsserAmount: 0.5,
@@ -64,7 +65,7 @@ const AudioEngine = (() => {
       icon: '🌿',
       desc: 'Wind & traffic noise',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.95, noiseThreshold: 0.8, noiseCalibrate: 0.0, manualNoiseProfile: null,
+        noiseEnabled: true, noiseAmount: 0.95, noiseThreshold: 0.8, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.0,
         eqEnabled: true, eqAmount: 0.6,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
@@ -78,9 +79,9 @@ const AudioEngine = (() => {
       icon: '🎙️',
       desc: 'Room echo & clarity',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.7, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null,
+        noiseEnabled: true, noiseAmount: 0.6, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.88,
         eqEnabled: true, eqAmount: 0.5,
-        reverbEnabled: true, reverbAmount: 0.8,
+        reverbEnabled: true, reverbAmount: 0.5,
         deEsserEnabled: true, deEsserAmount: 0.6,
         levelEnabled: true,
         silenceTrimEnabled: true, silenceTrimMode: 'compress', silenceTrimSensitivity: 0.5,
@@ -92,7 +93,7 @@ const AudioEngine = (() => {
       icon: '🎤',
       desc: 'Broadcast-ready voice',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.8, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null,
+        noiseEnabled: true, noiseAmount: 0.8, noiseThreshold: 0.5, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.0,
         eqEnabled: true, eqAmount: 0.7,
         reverbEnabled: true, reverbAmount: 0.6,
         deEsserEnabled: true, deEsserAmount: 0.5,
@@ -106,7 +107,7 @@ const AudioEngine = (() => {
       icon: '🎵',
       desc: 'Gentle cleanup',
       settings: {
-        noiseEnabled: true, noiseAmount: 0.4, noiseThreshold: 0.3, noiseCalibrate: 0.0, manualNoiseProfile: null,
+        noiseEnabled: true, noiseAmount: 0.4, noiseThreshold: 0.3, noiseCalibrate: 0.0, manualNoiseProfile: null, noiseSmoothing: 0.0,
         eqEnabled: true, eqAmount: 0.3,
         reverbEnabled: true, reverbAmount: 0.2,
         deEsserEnabled: false, deEsserAmount: 0.3,
@@ -172,14 +173,15 @@ const AudioEngine = (() => {
     let buffer = await applyLowCut(originalBuffer);
 
     const steps = [];
+    if (settings.reverbEnabled) steps.push('reverb');
     if (settings.noiseEnabled) steps.push('noise');
     if (settings.hissEnabled) steps.push('hiss');
-    if (settings.reverbEnabled) steps.push('reverb');
     if (settings.eqEnabled) steps.push('eq');
     if (settings.deEsserEnabled) steps.push('deesser');
     if (settings.levelEnabled) steps.push('level');
     if (settings.silenceTrimEnabled) steps.push('silence');
 
+    const bothActive = settings.noiseEnabled && settings.reverbEnabled;
     const totalSteps = steps.length;
     let currentStep = 0;
 
@@ -189,20 +191,22 @@ const AudioEngine = (() => {
       await new Promise(r => setTimeout(r, 30));
 
       switch (step) {
+        case 'reverb':
+          buffer = NoiseReduction.applyDeReverb(buffer, settings.reverbAmount, bothActive);
+          break;
         case 'noise':
           buffer = NoiseReduction.applyNoiseGate(
             buffer, 
             settings.noiseAmount, 
             settings.noiseThreshold, 
             settings.manualNoiseProfile, 
-            settings.noiseCalibrate
+            settings.noiseCalibrate,
+            bothActive,
+            settings.noiseSmoothing
           );
           break;
         case 'hiss':
           buffer = await applyHissReductionOffline(buffer, settings.hissAmount);
-          break;
-        case 'reverb':
-          buffer = NoiseReduction.applyDeReverb(buffer, settings.reverbAmount);
           break;
         case 'eq':
           buffer = await applyStudioEQ(buffer, settings.eqAmount);

@@ -83,9 +83,9 @@
 
   // All processing step definitions for the log
   const ALL_STEPS = [
+    { key: 'reverb', name: 'De-Reverb', icon: '🏠' },
     { key: 'noise', name: 'Noise Removal', icon: '🔇' },
     { key: 'hiss', name: 'Hiss Reduction', icon: '🧹' },
-    { key: 'reverb', name: 'De-Reverb', icon: '🏠' },
     { key: 'eq', name: 'Studio Magic EQ', icon: '🎛️' },
     { key: 'deesser', name: 'De-Esser', icon: '🦷' },
     { key: 'level', name: 'Auto-Leveling', icon: '📊' },
@@ -1113,12 +1113,14 @@
       let buffer = copyAudioBuffer(audioBuffer);
 
       const steps = [];
-      if (s.noiseEnabled) steps.push('noise');
       if (s.reverbEnabled) steps.push('reverb');
+      if (s.noiseEnabled) steps.push('noise');
       if (s.eqEnabled) steps.push('eq');
       if (s.deEsserEnabled) steps.push('deesser');
       if (s.levelEnabled) steps.push('level');
       if (s.silenceTrimEnabled) steps.push('silence');
+
+      const bothActive = s.noiseEnabled && s.reverbEnabled;
 
       for (let i = 0; i < steps.length; i++) {
         const progress = ((i + 1) / steps.length) * 100;
@@ -1126,8 +1128,8 @@
         if (onProgress) onProgress(progress, name);
 
         switch (steps[i]) {
-          case 'noise': buffer = NoiseReduction.applyNoiseGate(buffer, s.noiseAmount, s.noiseThreshold); break;
-          case 'reverb': buffer = NoiseReduction.applyDeReverb(buffer, s.reverbAmount); break;
+          case 'reverb': buffer = NoiseReduction.applyDeReverb(buffer, s.reverbAmount, bothActive); break;
+          case 'noise': buffer = NoiseReduction.applyNoiseGate(buffer, s.noiseAmount, s.noiseThreshold, s.manualNoiseProfile, s.noiseCalibrate, bothActive, s.noiseSmoothing || 0.0); break;
           case 'eq': buffer = await applyEQOffline(buffer, s.eqAmount); break;
           case 'deesser': buffer = DeEsser.apply(buffer, s.deEsserAmount); break;
           case 'level': buffer = applyLevelOffline(buffer); break;

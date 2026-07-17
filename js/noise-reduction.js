@@ -13,7 +13,7 @@ const NoiseReduction = (() => {
    * @param {number} sensitivity - Threshold sensitivity multiplier (0-1)
    * @returns {AudioBuffer} - Processed audio buffer
    */
-  function applyNoiseGate(audioBuffer, strength = 0.7, sensitivity = 0.5, manualNoiseProfile = null, dbShift = 0) {
+  function applyNoiseGate(audioBuffer, strength = 0.7, sensitivity = 0.5, manualNoiseProfile = null, dbShift = 0, bothActive = false, noiseSmoothing = 0.0) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const length = audioBuffer.length;
@@ -26,7 +26,7 @@ const NoiseReduction = (() => {
       const inputData = audioBuffer.getChannelData(ch);
       const outputData = outputBuffer.getChannelData(ch);
 
-      processChannelNoiseReduction(inputData, outputData, strength, sensitivity, sampleRate, manualNoiseProfile, dbShift);
+      processChannelNoiseReduction(inputData, outputData, strength, sensitivity, sampleRate, manualNoiseProfile, dbShift, bothActive, noiseSmoothing);
     }
 
     return outputBuffer;
@@ -35,7 +35,7 @@ const NoiseReduction = (() => {
   /**
    * Process a single channel for noise reduction using adaptive spectral gating
    */
-  function processChannelNoiseReduction(input, output, strength, sensitivity, sampleRate, manualNoiseProfile = null, dbShift = 0) {
+  function processChannelNoiseReduction(input, output, strength, sensitivity, sampleRate, manualNoiseProfile = null, dbShift = 0, bothActive = false, noiseSmoothing = 0.0) {
     const fftSize = 2048;
     const hopSize = fftSize / 4;
     const numFrames = Math.floor((input.length - fftSize) / hopSize) + 1;
@@ -48,6 +48,10 @@ const NoiseReduction = (() => {
 
     // Adaptive noise floor tracking
     const noiseFloor = new Float32Array(fftSize / 2 + 1);
+
+    // Prev gains buffer for temporal smoothing
+    const prevGains = new Float32Array(fftSize / 2 + 1);
+    prevGains.fill(1.0);
     
     // Time constants for asymmetric tracking filter
     const dt = hopSize / sampleRate;
@@ -127,7 +131,18 @@ const NoiseReduction = (() => {
         }
 
         const cleanMag = Math.sqrt(cleanPower);
-        const gain = Math.min(1.0, cleanMag / (mag + 1e-10));
+        let gain = Math.min(1.0, cleanMag / (mag + 1e-10));
+
+        // Temporal spectral smoothing
+        if (noiseSmoothing > 0) {
+          gain = noiseSmoothing * prevGains[i] + (1 - noiseSmoothing) * gain;
+        }
+        prevGains[i] = gain;
+
+        // Apply crosstalk gain floor limit
+        if (bothActive && gain < 0.316) {
+          gain = 0.316;
+        }
 
         real[i] *= gain;
         imag[i] *= gain;
@@ -161,7 +176,7 @@ const NoiseReduction = (() => {
   /**
    * Apply de-reverb (echo reduction) using spectral subtraction
    */
-  function applyDeReverb(audioBuffer, strength = 0.5) {
+  function applyDeReverb(audioBuffer, strength = 0.5, bothActive = false) {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const length = audioBuffer.length;
@@ -172,7 +187,7 @@ const NoiseReduction = (() => {
       const inputData = audioBuffer.getChannelData(ch);
       const outputData = outputBuffer.getChannelData(ch);
 
-      processChannelDeReverb(inputData, outputData, strength, sampleRate);
+      processChannelDeReverb(inputData, outputData, strength, sampleRate, bothActive);
     }
 
     return outputBuffer;
@@ -182,7 +197,7 @@ const NoiseReduction = (() => {
    * Process a single channel for de-reverb
    * Uses spectral decay analysis to identify and reduce reverb tails
    */
-  function processChannelDeReverb(input, output, strength, sampleRate) {
+  function processChannelDeReverb(input, output, strength, sampleRate, bothActive = false) {
     const fftSize = 4096;
     const hopSize = fftSize / 4;
     const numFrames = Math.floor((input.length - fftSize) / hopSize) + 1;
@@ -222,7 +237,8 @@ const NoiseReduction = (() => {
 
         // Subtract reverb estimate
         let cleanMag = magnitude - reverbEstimate * strength;
-        cleanMag = Math.max(cleanMag, magnitude * 0.1); // Floor to avoid artifacts
+        const minDeReverbGain = bothActive ? 0.316 : 0.1;
+        cleanMag = Math.max(cleanMag, magnitude * minDeReverbGain); // Floor to avoid artifacts
 
         real[i] = cleanMag * Math.cos(phase);
         imag[i] = cleanMag * Math.sin(phase);
