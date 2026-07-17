@@ -72,6 +72,7 @@
   let isProcessing = false;
   let currentProcessId = 0; // Async cancel group id
   let hasUnsavedChanges = false;
+  let isInitiallyCleaned = false;
 
   // All processing step definitions for the log
   const ALL_STEPS = [
@@ -98,6 +99,8 @@
 
     // Bind Apply Changes confirmation button
     document.getElementById('btn-apply-changes')?.addEventListener('click', applyChanges);
+    // Bind Clean Audio button
+    document.getElementById('btn-process-initial')?.addEventListener('click', triggerInitialClean);
 
     checkAuthState();
   }
@@ -443,7 +446,7 @@
   // PROCESSING CONFIRMATION (MANUAL APPLY)
   // ============================================
   function flagUnsavedChanges() {
-    if (!currentFile) return;
+    if (!currentFile || !isInitiallyCleaned) return;
 
     hasUnsavedChanges = true;
 
@@ -532,14 +535,52 @@
 
   async function handleSingleFile(file) {
     currentFile = file;
-    const myProcessId = ++currentProcessId;
+    currentProcessId++; // Invalidate previous processes
 
     AudioEngine.stop();
     WaveformVisualizer.stopFrequencyVisualizer();
     stopPlaybackTimer();
     clearUnsavedChanges();
+    isInitiallyCleaned = false;
+
+    // Display file name & size card
     showFileInfo(file);
+
+    // Sync settings from UI
+    syncSettingsFromUI();
+
+    // Reveal feature options/sliders (by revealing quick settings panel if anything is enabled)
+    updateQuickSettingsVisibility();
+
+    // Hide active player states since we haven't processed yet
+    waveformPanel.classList.remove('active');
+    playerControls.classList.remove('active');
+    controlsPanel.classList.remove('active');
+    freqVisualizer.classList.remove('active');
+    presetsPanel.style.display = 'none';
+
+    // Hide Apply Changes container
+    const applyWrap = document.getElementById('apply-changes-container');
+    if (applyWrap) applyWrap.style.display = 'none';
+
+    // Show the prominent "Clean Audio" button container below file card & sliders
+    const processInitialContainer = document.getElementById('process-initial-container');
+    if (processInitialContainer) {
+      processInitialContainer.style.display = 'flex';
+    }
+  }
+
+  async function triggerInitialClean() {
+    if (!currentFile || isProcessing) return;
+
+    // Hide Clean Audio button container
+    const processInitialContainer = document.getElementById('process-initial-container');
+    if (processInitialContainer) {
+      processInitialContainer.style.display = 'none';
+    }
+
     showProcessingWithLog();
+    const myProcessId = ++currentProcessId;
 
     try {
       // Decoding step
@@ -547,7 +588,7 @@
       processingText.textContent = 'Decoding audio...';
       progressBar.style.width = '5%';
 
-      await AudioEngine.decodeFile(file);
+      await AudioEngine.decodeFile(currentFile);
 
       if (myProcessId !== currentProcessId) return;
       updateProcessingLog('decode', 'done');
@@ -555,7 +596,7 @@
       // Sync settings from UI
       syncSettingsFromUI();
 
-      // Process automatically on first upload
+      // Process audio
       if (myProcessId !== currentProcessId) return;
       await processWithLog(myProcessId);
 
@@ -563,17 +604,25 @@
       progressBar.style.width = '100%';
       processingText.textContent = 'All done! ✨';
       await sleep(500);
-      
+
       if (myProcessId !== currentProcessId) return;
       hideProcessing();
       showPlayerUI();
+
+      // Mark as initially cleaned
+      isInitiallyCleaned = true;
       clearUnsavedChanges();
 
     } catch (err) {
       if (myProcessId !== currentProcessId) return;
-      console.error('Processing error:', err);
+      console.error('Initial processing error:', err);
       processingText.textContent = 'Error: ' + (err.message || 'Could not process this file');
       progressBar.style.width = '0%';
+
+      // Re-show Clean Audio button if it failed so user can try again
+      if (processInitialContainer) {
+        processInitialContainer.style.display = 'flex';
+      }
     }
   }
 
@@ -791,14 +840,20 @@
     stopPlaybackTimer();
     currentFile = null;
     isProcessing = false;
+    isInitiallyCleaned = false;
 
     dropZone.classList.remove('has-file');
     dropZone.innerHTML = `
       <span class="drop-zone-icon">🎵</span>
-      <p class="drop-zone-text">Drop your MP3 file here</p>
-      <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — strictly MP3 format</p>
+      <p class="drop-zone-text">Drop your audio file here</p>
+      <p class="drop-zone-hint">or <span class="browse-link">click to browse</span> — MP3, WAV, M4A, OGG, FLAC</p>
     `;
     fileInput.value = '';
+
+    const processInitialContainer = document.getElementById('process-initial-container');
+    if (processInitialContainer) {
+      processInitialContainer.style.display = 'none';
+    }
 
     processingStatus.classList.remove('active');
     waveformPanel.classList.remove('active');
