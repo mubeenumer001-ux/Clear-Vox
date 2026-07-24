@@ -149,14 +149,25 @@ const WaveformVisualizer = (() => {
     ctx.closePath();
   }
 
+  let fadeAnimId = null;
+
   /**
    * Start real-time frequency visualizer
    */
   function startFrequencyVisualizer(analyser) {
     if (!freqCanvas || !freqCtx || !analyser) return;
 
-    stopFrequencyVisualizer();
+    if (fadeAnimId) {
+      cancelAnimationFrame(fadeAnimId);
+      fadeAnimId = null;
+    }
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+
     resizeCanvas(freqCanvas);
+    freqCtx.globalAlpha = 1.0;
 
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
@@ -164,44 +175,60 @@ const WaveformVisualizer = (() => {
     function draw() {
       animationId = requestAnimationFrame(draw);
 
-      const width = freqCanvas.parentElement.getBoundingClientRect().width;
-      const height = freqCanvas.parentElement.getBoundingClientRect().height;
+      const parent = freqCanvas.parentElement;
+      const width = parent ? parent.getBoundingClientRect().width : freqCanvas.width;
+      const height = parent ? parent.getBoundingClientRect().height : freqCanvas.height;
       const ctx = freqCtx;
 
       analyser.getByteFrequencyData(dataArray);
       ctx.clearRect(0, 0, width, height);
 
-      // Draw frequency bars
-      const barCount = 64;
-      const barWidth = (width / barCount) - 2;
-      const gap = 2;
+      const isCleaned = (typeof AudioEngine !== 'undefined' && AudioEngine.getIsShowingCleaned)
+        ? AudioEngine.getIsShowingCleaned()
+        : true;
+
+      // Update badge text if element exists
+      const badge = document.getElementById('spectrum-mode-badge');
+      if (badge) {
+        badge.textContent = isCleaned ? 'CLEANED' : 'ORIGINAL';
+        badge.style.background = isCleaned ? 'rgba(6, 182, 212, 0.15)' : 'rgba(148, 163, 184, 0.15)';
+        badge.style.color = isCleaned ? 'var(--accent-cyan)' : 'var(--text-secondary)';
+      }
+
+      const barCount = 48; // Crisp, highly visible spectrum bars
+      const gap = 2; // Exact 2px gap between bars
+      const totalGapSpace = (barCount - 1) * gap;
+      const barWidth = Math.max(2, (width - totalGapSpace) / barCount);
+
+      // Gradient for Cleaned mode (Cyan fading into deep purple/violet)
+      const neonGradient = ctx.createLinearGradient(0, height, 0, 0);
+      neonGradient.addColorStop(0, '#06B6D4'); // Bright Cyan
+      neonGradient.addColorStop(0.5, '#7C3AED'); // Deep Purple
+      neonGradient.addColorStop(1, '#EC4899'); // Neon Pink accent top
 
       for (let i = 0; i < barCount; i++) {
-        // Map bar index to frequency bin (logarithmic)
-        const binIndex = Math.floor(Math.pow(i / barCount, 1.5) * bufferLength);
+        const binIndex = Math.floor(Math.pow(i / barCount, 1.25) * bufferLength);
         const value = dataArray[binIndex] || 0;
         const normalizedValue = value / 255;
 
-        const barHeight = normalizedValue * height * 0.9;
+        const barHeight = Math.max(3, normalizedValue * height * 0.88);
         const x = i * (barWidth + gap);
         const y = height - barHeight;
 
-        // Gradient color based on bar position
-        const hue = 270 - (i / barCount) * 90; // purple to cyan
-        const saturation = 70 + normalizedValue * 30;
-        const lightness = 40 + normalizedValue * 30;
+        if (isCleaned) {
+          ctx.fillStyle = neonGradient;
+        } else {
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.45)'; // Muted flat gray for Original
+        }
 
-        ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${0.6 + normalizedValue * 0.4})`;
-
-        // Rounded bar
         const radius = Math.min(barWidth / 2, 3);
         roundedRect(ctx, x, y, barWidth, barHeight, radius);
         ctx.fill();
 
-        // Glow effect for loud bars
-        if (normalizedValue > 0.7) {
-          ctx.shadowColor = `hsla(${hue}, 100%, 60%, 0.3)`;
-          ctx.shadowBlur = 8;
+        // Soft neon glow effect on high audio levels in Cleaned mode
+        if (isCleaned && normalizedValue > 0.35) {
+          ctx.shadowColor = 'rgba(6, 182, 212, 0.6)';
+          ctx.shadowBlur = 8 * normalizedValue;
           roundedRect(ctx, x, y, barWidth, barHeight, radius);
           ctx.fill();
           ctx.shadowBlur = 0;
@@ -213,7 +240,7 @@ const WaveformVisualizer = (() => {
   }
 
   /**
-   * Stop frequency visualizer
+   * Stop frequency visualizer with a smooth fade-out animation
    */
   function stopFrequencyVisualizer() {
     if (animationId) {
@@ -221,11 +248,30 @@ const WaveformVisualizer = (() => {
       animationId = null;
     }
 
-    if (freqCanvas && freqCtx) {
-      const width = freqCanvas.parentElement.getBoundingClientRect().width;
-      const height = freqCanvas.parentElement.getBoundingClientRect().height;
-      freqCtx.clearRect(0, 0, width, height);
+    if (fadeAnimId) {
+      cancelAnimationFrame(fadeAnimId);
+      fadeAnimId = null;
     }
+
+    if (!freqCanvas || !freqCtx) return;
+
+    let opacity = 1.0;
+    function fadeOut() {
+      if (opacity <= 0.05) {
+        const parent = freqCanvas.parentElement;
+        const width = parent ? parent.getBoundingClientRect().width : freqCanvas.width;
+        const height = parent ? parent.getBoundingClientRect().height : freqCanvas.height;
+        freqCtx.clearRect(0, 0, width, height);
+        freqCtx.globalAlpha = 1.0;
+        fadeAnimId = null;
+        return;
+      }
+      opacity *= 0.78; // Smooth exponential fade-out
+      freqCtx.globalAlpha = opacity;
+      fadeAnimId = requestAnimationFrame(fadeOut);
+    }
+
+    fadeOut();
   }
 
   /**

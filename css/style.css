@@ -676,7 +676,7 @@ body {
   cursor: pointer;
   font-family: var(--font-ui);
   outline: none;
-  transition: all var(--transition-normal);
+  transition: all 0.2s ease-in-out;
 }
 
 .chip:hover {
@@ -690,7 +690,7 @@ body {
   background: var(--gradient-primary);
   border-color: transparent;
   color: white;
-  box-shadow: var(--shadow-glow-sm);
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.5), 0 0 30px rgba(6, 182, 212, 0.3);
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
@@ -700,13 +700,13 @@ body {
    ============================================ */
 .glass-card {
   position: relative;
-  background: var(--bg-glass);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--border-glass);
+  background: rgba(12, 13, 22, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-xl);
   padding: 1.75rem;
-  transition: all var(--transition-normal);
+  transition: all 0.2s ease-in-out;
   overflow: hidden;
 }
 
@@ -1407,41 +1407,56 @@ body {
 }
 
 /* ---- Range Slider ---- */
+/* ---- Custom Range Sliders & Timeline Scrubber ---- */
 .range-slider { width: 110px; }
 
-.range-slider input[type="range"] {
+input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
-  background: rgba(255,255,255,0.06);
+  height: 5px;
+  background: linear-gradient(to right, #06B6D4 0%, #8B5CF6 var(--range-progress, 0%), rgba(255, 255, 255, 0.08) var(--range-progress, 0%));
   border-radius: var(--radius-full);
   outline: none;
   cursor: pointer;
+  transition: all 0.2s ease-in-out;
 }
 
-.range-slider input[type="range"]::-webkit-slider-thumb {
+input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 15px; height: 15px;
-  background: white;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
   border-radius: 50%;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.3), var(--shadow-glow-sm);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   cursor: pointer;
-  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
 }
 
-.range-slider input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-  box-shadow: 0 1px 6px rgba(0,0,0,0.3), var(--shadow-glow-md);
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.9), 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
-.range-slider input[type="range"]::-moz-range-thumb {
-  width: 15px; height: 15px;
-  background: white;
-  border-radius: 50%;
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
   border: none;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
   cursor: pointer;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.25);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.9), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-scrubber {
+  height: 6px !important;
 }
 
 .range-value {
@@ -1457,16 +1472,21 @@ body {
 .freq-visualizer {
   display: none;
   position: relative;
-  height: 100px;
+  height: 110px;
   overflow: hidden;
+  margin-top: 1rem;
 }
 
 .freq-visualizer.active {
   display: block;
-  animation: fadeInUp 0.5s ease-out 0.15s both;
+  animation: fadeInUp 0.4s ease-out 0.1s both;
 }
 
-.freq-visualizer canvas { width: 100%; height: 100%; display: block; }
+.freq-visualizer canvas {
+  width: 100%;
+  height: 75px;
+  display: block;
+}
 
 /* ---- Footer ---- */
 .app-footer {

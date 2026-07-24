@@ -428,8 +428,8 @@ const AudioEngine = (() => {
     sourceNode.buffer = buffer;
 
     analyserNode = audioContext.createAnalyser();
-    analyserNode.fftSize = 2048;
-    analyserNode.smoothingTimeConstant = 0.8;
+    analyserNode.fftSize = 256;
+    analyserNode.smoothingTimeConstant = 0.85;
 
     gainNode = audioContext.createGain();
     gainNode.gain.value = 1;

@@ -213,6 +213,19 @@
       updateTimeDisplay();
     });
 
+    // Timeline Scrubber
+    const timelineScrubber = document.getElementById('timeline-scrubber');
+    if (timelineScrubber) {
+      timelineScrubber.addEventListener('input', () => {
+        const d = AudioEngine.getDuration();
+        if (d > 0) {
+          const pos = parseFloat(timelineScrubber.value) / 1000;
+          AudioEngine.seek(Math.max(0, Math.min(1, pos)), onPlaybackEnded);
+          updateTimeDisplay();
+        }
+      });
+    }
+
     // Controls
     bindControl(noiseToggle, noiseAmount, noiseValue, 'noiseEnabled', 'noiseAmount');
 
@@ -1445,7 +1458,15 @@
   function updateTimeDisplay() {
     const c = AudioEngine.getCurrentTime(), d = AudioEngine.getDuration();
     timeCurrent.textContent = WaveformVisualizer.formatTime(c);
-    if (d > 0) WaveformVisualizer.updateCursor(c / d);
+    if (d > 0) {
+      const frac = c / d;
+      WaveformVisualizer.updateCursor(frac);
+      const timelineScrubber = document.getElementById('timeline-scrubber');
+      if (timelineScrubber) {
+        timelineScrubber.value = Math.floor(frac * 1000);
+        timelineScrubber.style.setProperty('--range-progress', (frac * 100).toFixed(1) + '%');
+      }
+    }
   }
 
   // ============================================
