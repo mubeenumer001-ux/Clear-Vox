@@ -350,7 +350,41 @@
         <span>📥</span>
         <span id="export-label">Download MP3</span>
       </button>
+
+      <!-- Webhook Export -->
+      <button class="btn btn-webhook" id="btn-webhook" title="Send to Automation (Webhook)">
+        <span>🔗</span>
+        <span>Send to Webhook</span>
+      </button>
     </section>
+
+    <!-- Webhook Modal Overlay -->
+    <div class="webhook-modal-overlay" id="webhook-modal-overlay">
+      <div class="webhook-modal">
+        <div class="webhook-modal-header">
+          <div class="webhook-modal-icon">🔗</div>
+          <h3>Send to Automation</h3>
+          <p class="webhook-modal-desc">POST the cleaned MP3 to your webhook endpoint (e.g. Make, Zapier, n8n)</p>
+        </div>
+        <div class="webhook-modal-body">
+          <label class="webhook-label" for="webhook-url-input">Webhook URL</label>
+          <div class="webhook-input-row">
+            <input type="url" id="webhook-url-input" class="webhook-input" placeholder="https://hook.example.com/your-endpoint" spellcheck="false" autocomplete="url">
+          </div>
+        </div>
+        <div class="webhook-modal-footer">
+          <button class="btn btn-secondary" id="webhook-cancel">Cancel</button>
+          <button class="btn btn-primary btn-webhook-send" id="webhook-send">
+            <span class="webhook-send-icon">🚀</span>
+            <span class="webhook-send-label">Send File</span>
+            <span class="webhook-spinner" style="display:none;"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toast-container"></div>
 
     <!-- Smart Presets -->
     <section class="glass-card presets-panel" id="presets-panel" style="display:none">

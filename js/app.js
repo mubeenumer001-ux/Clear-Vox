@@ -101,6 +101,7 @@
     bindAppEvents();
     bindPresetEvents();
     bindExportEvents();
+    bindWebhookEvents();
     bindBatchEvents();
     setupFeatureChips();
     setupQuickSettingsSliders();
@@ -1099,6 +1100,184 @@
       hideProcessing();
       showPlayerUI();
     }
+  }
+
+  // ============================================
+  // WEBHOOK INTEGRATION
+  // ============================================
+  const WEBHOOK_STORAGE_KEY = 'clearvox-webhook-url';
+
+  function bindWebhookEvents() {
+    const btnWebhook = document.getElementById('btn-webhook');
+    const overlay = document.getElementById('webhook-modal-overlay');
+    const urlInput = document.getElementById('webhook-url-input');
+    const btnSend = document.getElementById('webhook-send');
+    const btnCancel = document.getElementById('webhook-cancel');
+
+    if (!btnWebhook || !overlay) return;
+
+    // Restore saved URL from localStorage
+    const savedUrl = localStorage.getItem(WEBHOOK_STORAGE_KEY);
+    if (savedUrl && urlInput) {
+      urlInput.value = savedUrl;
+    }
+
+    // Open modal
+    btnWebhook.addEventListener('click', () => {
+      if (!AudioEngine.getCleanedBuffer()) {
+        showToast('error', 'No cleaned audio to send. Process a file first.');
+        return;
+      }
+      overlay.classList.add('active');
+      urlInput.focus();
+      urlInput.classList.remove('error');
+    });
+
+    // Close modal
+    btnCancel.addEventListener('click', () => closeWebhookModal());
+
+    // Close on overlay click (outside modal)
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeWebhookModal();
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlay.classList.contains('active')) {
+        closeWebhookModal();
+      }
+    });
+
+    // Send on Enter key
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        btnSend.click();
+      }
+    });
+
+    // Send
+    btnSend.addEventListener('click', () => sendWebhook());
+  }
+
+  function closeWebhookModal() {
+    const overlay = document.getElementById('webhook-modal-overlay');
+    if (overlay) overlay.classList.remove('active');
+  }
+
+  async function sendWebhook() {
+    const overlay = document.getElementById('webhook-modal-overlay');
+    const urlInput = document.getElementById('webhook-url-input');
+    const btnSend = document.getElementById('webhook-send');
+
+    const webhookUrl = urlInput.value.trim();
+
+    // Validate URL
+    if (!webhookUrl) {
+      urlInput.classList.add('error');
+      showToast('error', 'Please enter a webhook URL.');
+      urlInput.focus();
+      return;
+    }
+
+    try {
+      new URL(webhookUrl);
+    } catch {
+      urlInput.classList.add('error');
+      showToast('error', 'Invalid URL format. Must start with https://');
+      urlInput.focus();
+      return;
+    }
+
+    urlInput.classList.remove('error');
+
+    // Save URL to localStorage
+    localStorage.setItem(WEBHOOK_STORAGE_KEY, webhookUrl);
+
+    // Prepare the MP3 blob
+    let buffer = AudioEngine.getCleanedBuffer();
+    if (!buffer) {
+      showToast('error', 'No processed audio available.');
+      return;
+    }
+
+    // Apply trim boundaries if set
+    if (trimStartPercent > 0.0 || trimEndPercent < 1.0) {
+      const sampleRate = buffer.sampleRate;
+      const startSample = Math.floor(trimStartPercent * buffer.length);
+      const endSample = Math.floor(trimEndPercent * buffer.length);
+      const trimmedLength = Math.max(1, endSample - startSample);
+
+      const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, trimmedLength, sampleRate);
+      const croppedBuffer = offlineCtx.createBuffer(buffer.numberOfChannels, trimmedLength, sampleRate);
+
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+        const srcData = buffer.getChannelData(ch);
+        const dstData = croppedBuffer.getChannelData(ch);
+        dstData.set(srcData.subarray(startSample, endSample));
+      }
+      buffer = croppedBuffer;
+    }
+
+    const filename = currentFile
+      ? currentFile.name.replace(/\.[^/.]+$/, '') + '-clearvox.mp3'
+      : 'recording-clearvox.mp3';
+
+    // Set loading state
+    btnSend.classList.add('sending');
+    btnSend.disabled = true;
+
+    try {
+      // Encode to MP3 first
+      const mp3Blob = await AudioExporter.encodeMP3(buffer, 320);
+
+      // POST to webhook
+      const result = await AudioExporter.sendToWebhook(mp3Blob, filename, webhookUrl);
+
+      if (result.ok) {
+        showToast('success', `File sent successfully! (${result.status})`);
+        closeWebhookModal();
+      } else {
+        showToast('error', `Webhook returned ${result.status}: ${result.statusText}`);
+      }
+    } catch (err) {
+      console.error('Webhook error:', err);
+      if (err.message.includes('Failed to fetch') || err.name === 'TypeError') {
+        showToast('error', 'Network error — check the URL or CORS settings on the endpoint.');
+      } else {
+        showToast('error', `Webhook failed: ${err.message}`);
+      }
+    } finally {
+      btnSend.classList.remove('sending');
+      btnSend.disabled = false;
+    }
+  }
+
+  /**
+   * Show a toast notification
+   * @param {'success' | 'error' | 'info'} type
+   * @param {string} message
+   */
+  function showToast(type, message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+      <span class="toast-icon">${icons[type] || 'ℹ️'}</span>
+      <span>${message}</span>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+      toast.classList.add('toast-exit');
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
   }
 
   // ============================================

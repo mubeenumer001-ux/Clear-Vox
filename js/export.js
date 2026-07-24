@@ -112,9 +112,41 @@ const AudioExporter = (() => {
     return originalName.replace(/\.[^/.]+$/, '') + '-clearvox-cleaned.mp3';
   }
 
+  /**
+   * Send MP3 Blob to a webhook URL via FormData POST
+   * @param {Blob} mp3Blob - The encoded MP3 blob
+   * @param {string} filename - The output filename
+   * @param {string} webhookUrl - The target webhook URL
+   * @returns {Promise<{ok: boolean, status: number, statusText: string}>}
+   */
+  async function sendToWebhook(mp3Blob, filename, webhookUrl) {
+    if (!mp3Blob) throw new Error('No MP3 data to send');
+    if (!webhookUrl || !webhookUrl.startsWith('http')) {
+      throw new Error('Invalid webhook URL');
+    }
+
+    const formData = new FormData();
+    formData.append('file', mp3Blob, filename);
+    formData.append('filename', filename);
+    formData.append('source', 'ClearVox');
+    formData.append('timestamp', new Date().toISOString());
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      body: formData
+    });
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText
+    };
+  }
+
   return {
     exportAudio,
     encodeMP3,
-    generateFilename
+    generateFilename,
+    sendToWebhook
   };
 })();
